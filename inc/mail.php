@@ -96,17 +96,20 @@ HTML;
  */
 function plugin_solicitud_send_email(string $to, string $subject, string $html): void
 {
+    global $CFG_GLPI;
+
     try {
         $mailer = new GLPIMailer();
 
-        // Remitente: usa la configuración de GLPI (Configuración → Notificaciones)
-        $fromEmail = Config::getConfigurationValue('mailing', 'admin_email')
-                     ?: 'noreply@glpi.local';
-        $fromName  = Config::getConfigurationValue('mailing', 'admin_email_name')
-                     ?: 'GLPI';
+        // Remitente: usa la configuración de GLPI (forzar string, nunca null)
+        $fromEmail = (string) ($CFG_GLPI['admin_email']      ?? 'noreply@glpi.local');
+        $fromName  = (string) ($CFG_GLPI['admin_email_name'] ?? 'GLPI');
+        if ($fromName === '') {
+            $fromName = 'GLPI';
+        }
 
         $mailer->setFrom($fromEmail, $fromName);
-        $mailer->addAddress($to);
+        $mailer->addAddress($to, '');   // segundo arg '' obligatorio en GLPI 11
         $mailer->isHTML(true);
         $mailer->Subject = $subject;
         $mailer->Body    = $html;
@@ -114,11 +117,24 @@ function plugin_solicitud_send_email(string $to, string $subject, string $html):
             str_replace(['<br>', '<br/>', '<br />'], "\n", $html)
         );
 
-        $mailer->send();
+        $result = $mailer->send();
+
+        // Log de éxito
+        file_put_contents(
+            GLPI_LOG_DIR . '/plugin_solicitud_mail.log',
+            date('[Y-m-d H:i:s]') . " OK enviado a $to | Asunto: $subject\n",
+            FILE_APPEND
+        );
+
     } catch (\Throwable $e) {
-        // Loguear el error en el log de GLPI y continuar sin romper el flujo
-        Toolbox::logError(
-            '[plugin_solicitud] Error enviando email a ' . $to . ': ' . $e->getMessage()
+        // Log del error real en archivo dedicado
+        file_put_contents(
+            GLPI_LOG_DIR . '/plugin_solicitud_mail.log',
+            date('[Y-m-d H:i:s]') . " ERROR enviando a $to: " . $e->getMessage() . "\n"
+            . "  SMTP host: " . ($CFG_GLPI['smtp_host'] ?? 'NO CONFIGURADO') . "\n"
+            . "  SMTP port: " . ($CFG_GLPI['smtp_port'] ?? 'NO CONFIGURADO') . "\n"
+            . "  Notif mail: " . ($CFG_GLPI['use_notifications'] ?? 'NO') . "\n",
+            FILE_APPEND
         );
     }
 }

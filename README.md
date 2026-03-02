@@ -176,3 +176,9 @@ SELECT id, status FROM glpi_tickets WHERE id = <ID_TICKET>;
 - Validar HMAC con clave secreta en el parámetro de la URL.
 - Limitar intentos de acceso al endpoint por IP.
 - Forzar HTTPS en el servidor Apache.
+
+<?php
+require_once __DIR__ . '/inc/approvaltoken.class.php';
+require_once __DIR__ . '/inc/config.class.php';
+require_once __DIR__ . '/inc/mail.php';
+require_once __DIR__ . '/inc/solicitud.class.php';

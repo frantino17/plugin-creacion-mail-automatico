@@ -5,6 +5,12 @@
 
 defined('GLPI_ROOT') || die('Security breach!');
 
+// Cargar funciones de mail y helpers del plugin
+require_once __DIR__ . '/inc/approvaltoken.class.php';
+require_once __DIR__ . '/inc/config.class.php';
+require_once __DIR__ . '/inc/mail.php';
+require_once __DIR__ . '/inc/solicitud.class.php';
+
 // ─── Instalación ──────────────────────────────────────────────────────────────
 
 function plugin_solicitud_install(): bool
@@ -12,38 +18,46 @@ function plugin_solicitud_install(): bool
     /** @var \DBmysql $DB */
     global $DB;
 
-    $migration = new Migration(PLUGIN_SOLICITUD_VERSION);
+    // GLPI 11.x prohíbe $DB->query() (SQL directo de aplicación),
+    // pero $DB->doQuery() es el método interno usado por Migration
+    // y está permitido para DDL en plugins.
 
-    // Tabla de tokens de aprobación
+    // ── Tabla de tokens de aprobación ─────────────────────────────────────────
     if (!$DB->tableExists('glpi_plugin_solicitud_tokens')) {
-        $query = "CREATE TABLE `glpi_plugin_solicitud_tokens` (
-            `id`            INT UNSIGNED NOT NULL AUTO_INCREMENT,
-            `tickets_id`    INT UNSIGNED NOT NULL DEFAULT 0,
-            `token`         VARCHAR(128) NOT NULL DEFAULT '',
-            `status`        VARCHAR(32)  NOT NULL DEFAULT 'pending',
-            `approver_email`VARCHAR(255) NOT NULL DEFAULT '',
-            `date_creation` TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            `date_action`   TIMESTAMP    NULL DEFAULT NULL,
-            PRIMARY KEY (`id`),
-            UNIQUE KEY `token` (`token`),
-            KEY `tickets_id`  (`tickets_id`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;";
-        $DB->query($query) || die($DB->error());
+        $DB->doQuery("
+            CREATE TABLE `glpi_plugin_solicitud_tokens` (
+                `id`              INT UNSIGNED    NOT NULL AUTO_INCREMENT,
+                `tickets_id`      INT UNSIGNED    NOT NULL DEFAULT 0,
+                `token`           VARCHAR(128)    NOT NULL DEFAULT '',
+                `status`          VARCHAR(32)     NOT NULL DEFAULT 'pending',
+                `approver_email`  VARCHAR(255)    NOT NULL DEFAULT '',
+                `date_creation`   DATETIME        DEFAULT NULL,
+                `date_action`     DATETIME        DEFAULT NULL,
+                PRIMARY KEY (`id`),
+                UNIQUE KEY `token` (`token`),
+                KEY `tickets_id`  (`tickets_id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
     }
 
-    // Tabla de configuración del plugin
+    // ── Tabla de configuración del plugin ─────────────────────────────────────
     if (!$DB->tableExists('glpi_plugin_solicitud_configs')) {
-        $query = "CREATE TABLE `glpi_plugin_solicitud_configs` (
-            `id`                  INT UNSIGNED NOT NULL AUTO_INCREMENT,
-            `category_name`       VARCHAR(255) NOT NULL DEFAULT 'Solicitud de Alta de Mail',
-            `approver_email`      VARCHAR(255) NOT NULL DEFAULT '',
-            `it_email`            VARCHAR(255) NOT NULL DEFAULT '',
-            `glpi_base_url`       VARCHAR(255) NOT NULL DEFAULT '',
-            PRIMARY KEY (`id`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;";
-        $DB->query($query) || die($DB->error());
+        $DB->doQuery("
+            CREATE TABLE `glpi_plugin_solicitud_configs` (
+                `id`              INT UNSIGNED    NOT NULL AUTO_INCREMENT,
+                `category_name`   VARCHAR(255)    NOT NULL DEFAULT 'Solicitud de Alta de Mail',
+                `approver_email`  VARCHAR(255)    NOT NULL DEFAULT '',
+                `it_email`        VARCHAR(255)    NOT NULL DEFAULT '',
+                `glpi_base_url`   VARCHAR(255)    NOT NULL DEFAULT 'https://glpi.local',
+                PRIMARY KEY (`id`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+    }
 
-        // Insertar fila de configuración por defecto
+    // ── Fila de configuración por defecto ─────────────────────────────────────
+    if ($DB->tableExists('glpi_plugin_solicitud_configs')
+        && countElementsInTable('glpi_plugin_solicitud_configs') === 0
+    ) {
         $DB->insert('glpi_plugin_solicitud_configs', [
             'category_name'  => 'Solicitud de Alta de Mail',
             'approver_email' => 'directivo@empresa.com',
@@ -52,7 +66,6 @@ function plugin_solicitud_install(): bool
         ]);
     }
 
-    $migration->executeMigration();
     return true;
 }
 
@@ -63,14 +76,9 @@ function plugin_solicitud_uninstall(): bool
     /** @var \DBmysql $DB */
     global $DB;
 
-    $tables = [
-        'glpi_plugin_solicitud_tokens',
-        'glpi_plugin_solicitud_configs',
-    ];
-
-    foreach ($tables as $table) {
+    foreach (['glpi_plugin_solicitud_tokens', 'glpi_plugin_solicitud_configs'] as $table) {
         if ($DB->tableExists($table)) {
-            $DB->query("DROP TABLE `$table`");
+            $DB->doQuery("DROP TABLE `$table`");
         }
     }
 

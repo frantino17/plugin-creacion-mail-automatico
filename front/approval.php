@@ -5,25 +5,22 @@
  *
  * GET /plugins/solicitud/front/approval.php?token=XXXX&action=approve|reject
  *
- * ⚠  Este archivo NO requiere que el usuario inicie sesión en GLPI.
- *    Incluye el entorno mínimo de GLPI sin autenticación de sesión.
+ * GLPI 11.x: el entorno Symfony ya está inicializado cuando este archivo se carga.
+ * NO se debe hacer bootstrap manual (inc/includes.php no existe en GLPI 11).
  */
 
-// ── 1. Bootstrap mínimo de GLPI (sin requerir sesión) ────────────────────────
-define('GLPI_ROOT', dirname(dirname(dirname(dirname(__DIR__)))));
-
-// Verificar que GLPI_ROOT sea válido
-if (!file_exists(GLPI_ROOT . '/inc/includes.php')) {
-    http_response_code(500);
-    die('Error: no se puede localizar GLPI. Verifique la ruta de instalación.');
+// ── 1. GLPI_ROOT: 3 niveles arriba desde front/ ───────────────────────────────
+// front/ → solicitud/ → plugins/ → glpi/
+if (!defined('GLPI_ROOT')) {
+    define('GLPI_ROOT', dirname(dirname(dirname(__DIR__))));
 }
 
-// Inicializar GLPI sin requerir login
-require_once GLPI_ROOT . '/inc/includes.php';
-loadLanguage('es_ES');
-
-// ── 2. Cargar clases del plugin ───────────────────────────────────────────────
-Plugin::load('solicitud');
+// ── 2. Cargar clases del plugin directamente ──────────────────────────────────
+$pluginDir = dirname(__DIR__);
+require_once $pluginDir . '/inc/approvaltoken.class.php';
+require_once $pluginDir . '/inc/config.class.php';
+require_once $pluginDir . '/inc/mail.php';
+require_once $pluginDir . '/inc/solicitud.class.php';
 
 // ── 3. Leer y sanear parámetros GET ──────────────────────────────────────────
 $token  = isset($_GET['token'])  ? trim($_GET['token'])  : '';
