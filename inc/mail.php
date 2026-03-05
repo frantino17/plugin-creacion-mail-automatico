@@ -214,6 +214,62 @@ function plugin_solicitud_approval_email_html(
 HTML;
 }
 
+// ─── Email al área de Cómputos con el formulario de alta ─────────────────────
+
+/**
+ * Envía email al área de Cómputos con link al formulario de alta de correo.
+ * Usado desde el contexto GLPI (hook), por eso usa GLPIMailer.
+ *
+ * @param string $computosEmail  Email del área de Cómputos.
+ * @param int    $ticketId       ID del ticket aprobado.
+ * @param string $formUrl        URL completa al front/form.php con form_token.
+ */
+function plugin_solicitud_send_computos_email(
+    string $computosEmail,
+    int    $ticketId,
+    string $formUrl
+): void {
+    $safeUrl = htmlspecialchars($formUrl, ENT_QUOTES);
+
+    $html = <<<HTML
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="UTF-8">
+<style>
+  body{font-family:Arial,sans-serif;background:#f0f2f5;padding:30px;margin:0}
+  .w{max-width:600px;margin:auto}
+  .hdr{background:#28a745;color:#fff;padding:22px 28px;border-radius:8px 8px 0 0}
+  .hdr h1{font-size:19px;margin:0}
+  .bdy{background:#fff;padding:28px;border:1px solid #dde3ec;border-top:none;color:#444;line-height:1.6}
+  .box{background:#f7fff9;border-left:4px solid #28a745;padding:12px 16px;margin:16px 0;border-radius:0 6px 6px 0}
+  .btn{display:inline-block;padding:14px 34px;background:#2d6cdf;color:#fff;
+       text-decoration:none;border-radius:6px;font-weight:700;font-size:15px;margin-top:20px}
+  .ftr{background:#f7f9ff;padding:14px 28px;border:1px solid #dde3ec;border-top:none;
+       border-radius:0 0 8px 8px;font-size:12px;color:#888}
+</style></head><body>
+<div class="w">
+  <div class="hdr"><h1>&#9989; Solicitud Aprobada &mdash; Alta de Correo</h1></div>
+  <div class="bdy">
+    <p>El directivo ha <strong>aprobado</strong> la solicitud del <strong>Ticket #$ticketId</strong>.</p>
+    <div class="box">Complete el formulario para registrar el correo institucional creado.</div>
+    <p>Haga clic en el bot&oacute;n para acceder al formulario.
+       <strong>No es necesario iniciar sesi&oacute;n en GLPI.</strong></p>
+    <a href="$safeUrl" class="btn">&#128394; Completar formulario</a>
+    <p style="margin-top:20px;font-size:12px;color:#888">O copie este enlace en su navegador:<br>$safeUrl</p>
+  </div>
+  <div class="ftr">Generado autom&aacute;ticamente &mdash; Plugin Solicitud &mdash; GLPI</div>
+</div>
+</body>
+</html>
+HTML;
+
+    plugin_solicitud_send_email(
+        $computosEmail,
+        "Alta de Correo Institucional — Ticket #$ticketId: APROBADA",
+        $html
+    );
+}
+
 // ─── Agregar seguimiento (followup) al ticket ─────────────────────────────────
 
 /**
@@ -224,13 +280,22 @@ HTML;
  */
 function plugin_solicitud_add_followup(int $ticketId, string $message): void
 {
-    $followup = new ITILFollowup();
-    $followup->add([
+    /** @var \DBmysql $DB */
+    global $DB;
+
+    // Se usa $DB->insert() directamente para evitar el chequeo de permisos de
+    // ITILFollowup::add(), que requiere un usuario autenticado en sesión.
+    $now = date('Y-m-d H:i:s');
+
+    $DB->insert('glpi_itilfollowups', [
         'itemtype'        => 'Ticket',
         'items_id'        => $ticketId,
+        'users_id'        => 0,   // 0 = acción automática del sistema
         'content'         => $message,
         'is_private'      => 0,
         'requesttypes_id' => 0,
-        'users_id'        => 0, // Sin usuario (acción automática del plugin)
+        'date'            => $now,
+        'date_creation'   => $now,
+        'date_mod'        => $now,
     ]);
 }

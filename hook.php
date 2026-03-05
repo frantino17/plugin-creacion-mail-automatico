@@ -33,11 +33,29 @@ function plugin_solicitud_install(): bool
                 `approver_email`  VARCHAR(255)    NOT NULL DEFAULT '',
                 `date_creation`   DATETIME        DEFAULT NULL,
                 `date_action`     DATETIME        DEFAULT NULL,
+                `expires_at`      DATETIME        DEFAULT NULL,
+                `form_token`      VARCHAR(128)    DEFAULT NULL,
                 PRIMARY KEY (`id`),
                 UNIQUE KEY `token` (`token`),
                 KEY `tickets_id`  (`tickets_id`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ");
+    } else {
+        // Migración: añadir columnas a instalaciones existentes
+        if (!$DB->fieldExists('glpi_plugin_solicitud_tokens', 'expires_at')) {
+            $DB->doQuery("
+                ALTER TABLE `glpi_plugin_solicitud_tokens`
+                    ADD COLUMN `expires_at` DATETIME DEFAULT NULL
+                        AFTER `date_action`
+            ");
+        }
+        if (!$DB->fieldExists('glpi_plugin_solicitud_tokens', 'form_token')) {
+            $DB->doQuery("
+                ALTER TABLE `glpi_plugin_solicitud_tokens`
+                    ADD COLUMN `form_token` VARCHAR(128) DEFAULT NULL
+                        AFTER `expires_at`
+            ");
+        }
     }
 
     // ── Tabla de configuración del plugin ─────────────────────────────────────
@@ -48,6 +66,7 @@ function plugin_solicitud_install(): bool
                 `category_name`   VARCHAR(255)    NOT NULL DEFAULT 'Solicitud de Alta de Mail',
                 `approver_email`  VARCHAR(255)    NOT NULL DEFAULT '',
                 `it_email`        VARCHAR(255)    NOT NULL DEFAULT '',
+                `computos_email`  VARCHAR(255)    NOT NULL DEFAULT '',
                 `glpi_base_url`   VARCHAR(255)    NOT NULL DEFAULT 'https://glpi.local',
                 PRIMARY KEY (`id`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
@@ -55,15 +74,25 @@ function plugin_solicitud_install(): bool
     }
 
     // ── Fila de configuración por defecto ─────────────────────────────────────
-    if ($DB->tableExists('glpi_plugin_solicitud_configs')
-        && countElementsInTable('glpi_plugin_solicitud_configs') === 0
-    ) {
-        $DB->insert('glpi_plugin_solicitud_configs', [
-            'category_name'  => 'Solicitud de Alta de Mail',
-            'approver_email' => 'directivo@empresa.com',
-            'it_email'       => 'it@empresa.com',
-            'glpi_base_url'  => 'https://glpi.local',
-        ]);
+    if ($DB->tableExists('glpi_plugin_solicitud_configs')) {
+        // Migración: añadir computos_email si no existe
+        if (!$DB->fieldExists('glpi_plugin_solicitud_configs', 'computos_email')) {
+            $DB->doQuery("
+                ALTER TABLE `glpi_plugin_solicitud_configs`
+                    ADD COLUMN `computos_email` VARCHAR(255) NOT NULL DEFAULT ''
+                        AFTER `it_email`
+            ");
+        }
+
+        if (countElementsInTable('glpi_plugin_solicitud_configs') === 0) {
+            $DB->insert('glpi_plugin_solicitud_configs', [
+                'category_name'  => 'Solicitud de Alta de Mail',
+                'approver_email' => 'directivo@empresa.com',
+                'it_email'       => 'it@empresa.com',
+                'computos_email' => 'computos@empresa.com',
+                'glpi_base_url'  => 'https://glpi.local',
+            ]);
+        }
     }
 
     return true;
@@ -135,16 +164,8 @@ function plugin_solicitud_ticket_created(Ticket $ticket): void
     $ticketId    = (int) $ticket->fields['id'];
     $ticketTitle = $ticket->fields['name'] ?? "Ticket #$ticketId";
 
-    // ----- 4. Generar token único -------------------------------------------
-    $token = bin2hex(random_bytes(32)); // 64 chars hexadecimales
-
-    $DB->insert('glpi_plugin_solicitud_tokens', [
-        'tickets_id'     => $ticketId,
-        'token'          => $token,
-        'status'         => 'pending',
-        'approver_email' => $approverEmail,
-        'date_creation'  => date('Y-m-d H:i:s'),
-    ]);
+    // ----- 4. Generar token único (con expiración de 48 horas) ---------------
+    $token = PluginSolicitudApprovalToken::createForTicket($ticketId, $approverEmail);
 
     // ----- 5. Construir URLs de acción --------------------------------------
     $approveUrl = "$baseUrl/plugins/solicitud/front/approval.php"

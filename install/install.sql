@@ -18,6 +18,10 @@ CREATE TABLE IF NOT EXISTS `glpi_plugin_solicitud_tokens` (
     `date_creation`   TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `date_action`     TIMESTAMP       NULL     DEFAULT NULL
                           COMMENT 'Timestamp en que el directivo tomó la decisión',
+    `expires_at`      DATETIME        NULL     DEFAULT NULL
+                          COMMENT 'Fecha/hora límite para usar el token (NULL = sin expiración)',
+    `form_token`      VARCHAR(128)    NULL     DEFAULT NULL
+                          COMMENT 'Token para el formulario de Cómputos (generado al aprobar)',
     PRIMARY KEY  (`id`),
     UNIQUE  KEY  `token`      (`token`),
     KEY          `tickets_id` (`tickets_id`)
@@ -35,6 +39,8 @@ CREATE TABLE IF NOT EXISTS `glpi_plugin_solicitud_configs` (
                           COMMENT 'Email por defecto del directivo aprobador',
     `it_email`        VARCHAR(255)    NOT NULL DEFAULT ''
                           COMMENT 'Email del área IT para recibir notificaciones',
+    `computos_email`  VARCHAR(255)    NOT NULL DEFAULT ''
+                          COMMENT 'Email del área de Cómputos para recibir el formulario de alta',
     `glpi_base_url`   VARCHAR(255)    NOT NULL DEFAULT 'https://glpi.local'
                           COMMENT 'URL base de GLPI (sin barra final)',
     PRIMARY KEY (`id`)
@@ -45,6 +51,6 @@ CREATE TABLE IF NOT EXISTS `glpi_plugin_solicitud_configs` (
 
 -- ── Fila de configuración por defecto ─────────────────────────────────────────
 INSERT IGNORE INTO `glpi_plugin_solicitud_configs`
-    (`category_name`, `approver_email`, `it_email`, `glpi_base_url`)
+    (`category_name`, `approver_email`, `it_email`, `computos_email`, `glpi_base_url`)
 VALUES
-    ('Solicitud de Alta de Mail', 'directivo@empresa.com', 'it@empresa.com', 'https://glpi.local');
+    ('Solicitud de Alta de Mail', 'directivo@empresa.com', 'it@empresa.com', 'computos@empresa.com', 'https://glpi.local');

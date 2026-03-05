@@ -59,7 +59,17 @@ class PluginSolicitud extends CommonGLPI
             ];
         }
 
-        // 3. Verificar que no haya sido procesado ya
+        // 3. Verificar expiración del token
+        if (!empty($row['expires_at']) && strtotime($row['expires_at']) < time()) {
+            return [
+                'ok'       => false,
+                'message'  => 'Este enlace ha expirado. Por favor, contacte al área IT para generar uno nuevo.',
+                'ticketId' => (int) $row['tickets_id'],
+                'decision' => 'expired',
+            ];
+        }
+
+        // 4. Verificar que no haya sido procesado ya
         if ($row['status'] !== 'pending') {
             $ya = ($row['status'] === 'approved') ? 'aprobada' : 'rechazada';
             return [
@@ -70,7 +80,7 @@ class PluginSolicitud extends CommonGLPI
             ];
         }
 
-        $ticketId = (int) $row['tickets_id'];
+        $ticketId  = (int) $row['tickets_id'];
         $newStatus = ($action === 'approve') ? 'approved' : 'rejected';
 
         // 4. Actualizar estado del token
@@ -106,30 +116,34 @@ class PluginSolicitud extends CommonGLPI
     /**
      * Actualiza el estado nativo del Ticket en GLPI.
      *
-     * - approve → SOLVED  (estado 5)
-     * - reject  → CLOSED  (estado 6)
+     * - approve → PLANNED ("En curso planificado", estado 3)
+     * - reject  → CLOSED ("Cerrado",              estado 6)
      *
      * @param int    $ticketId
-     * @param string $action
+     * @param string $action  'approve' | 'reject'
      */
     private static function updateTicketStatus(int $ticketId, string $action): void
     {
-        $ticket = new Ticket();
-        if (!$ticket->getFromDB($ticketId)) {
-            return;
-        }
+        /** @var \DBmysql $DB */
+        global $DB;
 
-        // Mapeo de acción → estado nativo de GLPI
+        // Mapeo de acción → valor numérico de estado de GLPI 11
+        // Se usa $DB->update() directamente para evitar el chequeo de permisos
+        // de Ticket::update(), que requiere un usuario autenticado en sesión.
         $statusMap = [
-            'approve' => Ticket::SOLVED,  // 5
-            'reject'  => Ticket::CLOSED,  // 6
+            'approve' => 3, // Ticket::PLANNED — "En curso planificado"
+            'reject'  => 6, // Ticket::CLOSED  — "Cerrado"
         ];
 
-        $newState = $statusMap[$action] ?? Ticket::CLOSED;
+        $newState = $statusMap[$action] ?? 6;
 
-        $ticket->update([
-            'id'     => $ticketId,
-            'status' => $newState,
-        ]);
+        $DB->update(
+            'glpi_tickets',
+            [
+                'status'   => $newState,
+                'date_mod' => date('Y-m-d H:i:s'),
+            ],
+            ['id' => $ticketId]
+        );
     }
 }

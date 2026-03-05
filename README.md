@@ -91,9 +91,9 @@ Directivo recibe el email y hace clic en un botón
         ▼
 GET /plugins/solicitud/front/approval.php?token=XXX&action=approve
         │
-        ├─ Valida token (existe, está en pending)
+        ├─ Valida token (existe, está en pending, no ha expirado)
         ├─ Actualiza token → approved/rejected
-        ├─ Cambia estado del Ticket (SOLVED si aprobado / CLOSED si rechazado)
+        ├─ Cambia estado del Ticket (PLANNED=3 si aprobado / CLOSED=6 si rechazado)
         ├─ Agrega seguimiento: "Solicitud APROBADA/RECHAZADA por directivo..."
         ├─ Envía email al área IT notificando la decisión
         └─ Muestra página HTML de confirmación al directivo
@@ -148,14 +148,16 @@ SELECT id, status FROM glpi_tickets WHERE id = <ID_TICKET>;
 
 ## Constantes de estado de Ticket en GLPI 11
 
-| Constante PHP         | Valor | Significado |
-|-----------------------|-------|-------------|
-| `Ticket::INCOMING`    | 1     | Nuevo       |
-| `Ticket::ASSIGNED`    | 2     | En curso    |
-| `Ticket::PLANNED`     | 3     | Planificado |
-| `Ticket::WAITING`     | 4     | En espera   |
-| `Ticket::SOLVED`      | 5     | Resuelto ✔  |
-| `Ticket::CLOSED`      | 6     | Cerrado ✘   |
+| Constante PHP         | Valor | Significado          |
+|-----------------------|-------|----------------------|
+| `Ticket::INCOMING`    | 1     | Nuevo                |
+| `Ticket::ASSIGNED`    | 2     | En curso             |
+| `Ticket::PLANNED`     | 3     | Planificado (**aprobado** → aquí) |
+| `Ticket::WAITING`     | 4     | En espera                        |
+| `Ticket::SOLVED`      | 5     | Resuelto                         |
+| `Ticket::CLOSED`      | 6     | Cerrado (**rechazado** → aquí)   |
+| `Ticket::SOLVED`      | 5     | Resuelto             |
+| `Ticket::CLOSED`      | 6     | Cerrado              |
 
 ---
 
@@ -170,12 +172,19 @@ SELECT id, status FROM glpi_tickets WHERE id = <ID_TICKET>;
 
 ---
 
-## Consideraciones de seguridad (futuras mejoras)
+## Consideraciones de seguridad (implementadas)
 
-- Agregar expiración al token (columna `expires_at`).
-- Validar HMAC con clave secreta en el parámetro de la URL.
+- Token de 64 caracteres hexadecimales generado con `random_bytes(32)`.
+- Expiración automática del token a las 48 h (`expires_at` en BD, configurable con `TOKEN_TTL_HOURS`).
+- Tokens de uso único: una vez actuados pasan a `approved`/`rejected` y no pueden reutilizarse.
+- Endpoint valida: existencia del token, estado `pending` y que no haya expirado.
+- Parámetros de URL saneados: `token` solo acepta caracteres hex, `action` solo `approve`/`reject`.
+
+### Mejoras futuras opcionales
+
+- Validar HMAC con clave secreta adicional en la URL.
 - Limitar intentos de acceso al endpoint por IP.
-- Forzar HTTPS en el servidor Apache.
+- Forzar HTTPS en Apache (`Strict-Transport-Security`).
 
 <?php
 require_once __DIR__ . '/inc/approvaltoken.class.php';

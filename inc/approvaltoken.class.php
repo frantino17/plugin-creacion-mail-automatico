@@ -21,12 +21,21 @@ class PluginSolicitudApprovalToken extends CommonDBTM
      * @param string $approverEmail  Email del directivo aprobador.
      * @return string  El token generado.
      */
+    /**
+     * Horas de validez de cada token antes de expirar.
+     * Cambiar a 0 para deshabilitar la expiración.
+     */
+    public const TOKEN_TTL_HOURS = 48;
+
     public static function createForTicket(int $ticketId, string $approverEmail): string
     {
         /** @var \DBmysql $DB */
         global $DB;
 
-        $token = bin2hex(random_bytes(32));
+        $token     = bin2hex(random_bytes(32)); // 64 chars hex
+        $expiresAt = (self::TOKEN_TTL_HOURS > 0)
+            ? date('Y-m-d H:i:s', strtotime('+' . self::TOKEN_TTL_HOURS . ' hours'))
+            : null;
 
         $DB->insert('glpi_plugin_solicitud_tokens', [
             'tickets_id'     => $ticketId,
@@ -34,6 +43,7 @@ class PluginSolicitudApprovalToken extends CommonDBTM
             'status'         => 'pending',
             'approver_email' => $approverEmail,
             'date_creation'  => date('Y-m-d H:i:s'),
+            'expires_at'     => $expiresAt,
         ]);
 
         return $token;
