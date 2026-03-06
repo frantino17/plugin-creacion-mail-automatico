@@ -87,7 +87,7 @@ function plugin_solicitud_install(): bool
         if (countElementsInTable('glpi_plugin_solicitud_configs') === 0) {
             $DB->insert('glpi_plugin_solicitud_configs', [
                 'category_name'  => 'Solicitud de Alta de Mail',
-                'approver_email' => 'directivo@empresa.com',
+                'approver_email' => 'director@empresa.com',
                 'it_email'       => 'it@empresa.com',
                 'computos_email' => 'computos@empresa.com',
                 'glpi_base_url'  => 'https://glpi.local',
@@ -173,7 +173,7 @@ function plugin_solicitud_ticket_created(Ticket $ticket): void
     $rejectUrl  = "$baseUrl/plugins/solicitud/front/approval.php"
                 . "?token=$token&action=reject";
 
-    // ----- 6. Enviar email al directivo ------------------------------------
+    // ----- 6. Enviar email al director ------------------------------------
     plugin_solicitud_send_approval_email(
         $approverEmail,
         $ticketId,
@@ -185,7 +185,7 @@ function plugin_solicitud_ticket_created(Ticket $ticket): void
     // ----- 7. Agregar seguimiento al ticket indicando que se envió el mail --
     plugin_solicitud_add_followup(
         $ticketId,
-        'Se ha enviado solicitud de aprobación al directivo vía email. '
+        'Se ha enviado solicitud de aprobación al director vía email. '
         . 'Esperando respuesta.'
     );
 }

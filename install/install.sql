@@ -14,10 +14,10 @@ CREATE TABLE IF NOT EXISTS `glpi_plugin_solicitud_tokens` (
                           NOT NULL DEFAULT 'pending'
                           COMMENT 'Estado actual del token',
     `approver_email`  VARCHAR(255)    NOT NULL DEFAULT ''
-                          COMMENT 'Email del directivo al que se envió el mail',
+                          COMMENT 'Email del director al que se envió el mail',
     `date_creation`   TIMESTAMP       NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `date_action`     TIMESTAMP       NULL     DEFAULT NULL
-                          COMMENT 'Timestamp en que el directivo tomó la decisión',
+                          COMMENT 'Timestamp en que el director tomó la decisión',
     `expires_at`      DATETIME        NULL     DEFAULT NULL
                           COMMENT 'Fecha/hora límite para usar el token (NULL = sin expiración)',
     `form_token`      VARCHAR(128)    NULL     DEFAULT NULL
@@ -36,7 +36,7 @@ CREATE TABLE IF NOT EXISTS `glpi_plugin_solicitud_configs` (
     `category_name`   VARCHAR(255)    NOT NULL DEFAULT 'Solicitud de Alta de Mail'
                           COMMENT 'Nombre de la categoría GLPI que activa el flujo',
     `approver_email`  VARCHAR(255)    NOT NULL DEFAULT ''
-                          COMMENT 'Email por defecto del directivo aprobador',
+                          COMMENT 'Email por defecto del director aprobador',
     `it_email`        VARCHAR(255)    NOT NULL DEFAULT ''
                           COMMENT 'Email del área IT para recibir notificaciones',
     `computos_email`  VARCHAR(255)    NOT NULL DEFAULT ''
@@ -53,4 +53,4 @@ CREATE TABLE IF NOT EXISTS `glpi_plugin_solicitud_configs` (
 INSERT IGNORE INTO `glpi_plugin_solicitud_configs`
     (`category_name`, `approver_email`, `it_email`, `computos_email`, `glpi_base_url`)
 VALUES
-    ('Solicitud de Alta de Mail', 'directivo@empresa.com', 'it@empresa.com', 'computos@empresa.com', 'https://glpi.local');
+    ('Solicitud de Alta de Mail', 'director@empresa.com', 'it@empresa.com', 'computos@empresa.com', 'https://glpi.local');

@@ -7,12 +7,12 @@
 
 defined('GLPI_ROOT') || die('Security breach!');
 
-// ─── Envío de email de aprobación al directivo ────────────────────────────────
+// ─── Envío de email de aprobación al director ────────────────────────────────
 
 /**
- * Envía el email con botones Aprobar / Rechazar al directivo.
+ * Envía el email con botones Aprobar / Rechazar al director.
  *
- * @param string $to           Email del directivo.
+ * @param string $to           Email del director.
  * @param int    $ticketId     ID del ticket.
  * @param string $ticketTitle  Título/nombre del ticket.
  * @param string $approveUrl   URL completa para aprobar.
@@ -42,7 +42,7 @@ function plugin_solicitud_send_approval_email(
 // ─── Envío de notificación al área IT ────────────────────────────────────────
 
 /**
- * Notifica al área IT sobre la decisión del directivo.
+ * Notifica al área IT sobre la decisión del director.
  *
  * @param string $itEmail
  * @param int    $ticketId
@@ -72,7 +72,7 @@ function plugin_solicitud_notify_it(
 <body>
 <div class="card">
   <h2>Notificación de Solicitud</h2>
-  <p>El directivo ha <strong>$action</strong> la solicitud correspondiente al
+  <p>El director ha <strong>$action</strong> la solicitud correspondiente al
      <strong>Ticket #$ticketId</strong>.</p>
   <p>Por favor, proceda según el resultado.</p>
   <hr>
@@ -250,7 +250,7 @@ function plugin_solicitud_send_computos_email(
 <div class="w">
   <div class="hdr"><h1>&#9989; Solicitud Aprobada &mdash; Alta de Correo</h1></div>
   <div class="bdy">
-    <p>El directivo ha <strong>aprobado</strong> la solicitud del <strong>Ticket #$ticketId</strong>.</p>
+    <p>El director ha <strong>aprobado</strong> la solicitud del <strong>Ticket #$ticketId</strong>.</p>
     <div class="box">Complete el formulario para registrar el correo institucional creado.</div>
     <p>Haga clic en el bot&oacute;n para acceder al formulario.
        <strong>No es necesario iniciar sesi&oacute;n en GLPI.</strong></p>

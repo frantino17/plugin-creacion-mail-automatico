@@ -18,7 +18,7 @@ class PluginSolicitudApprovalToken extends CommonDBTM
      * Crea un token nuevo para el ticket indicado.
      *
      * @param int    $ticketId       ID del ticket en GLPI.
-     * @param string $approverEmail  Email del directivo aprobador.
+     * @param string $approverEmail  Email del director aprobador.
      * @return string  El token generado.
      */
     /**

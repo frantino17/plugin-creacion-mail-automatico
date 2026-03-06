@@ -90,11 +90,10 @@ class PluginSolicitud extends CommonGLPI
         self::updateTicketStatus($ticketId, $action);
 
         // 6. Agregar seguimiento al ticket
-        $label = ($action === 'approve') ? 'APROBADA' : 'RECHAZADA';
-        plugin_solicitud_add_followup(
-            $ticketId,
-            "Solicitud $label por el directivo vía email (acción automatizada por plugin Solicitud)."
-        );
+        $followupContent = ($action === 'approve')
+            ? 'Solicitud aprobada por el director vía email (acción automatizada por plugin Solicitud).'
+            : 'Solicitud RECHAZADA por el director vía email (acción automatizada por plugin Solicitud).';
+        plugin_solicitud_add_followup($ticketId, $followupContent);
 
         // 7. Notificar al área IT
         $config = PluginSolicitudConfig::getConfig();
@@ -116,8 +115,8 @@ class PluginSolicitud extends CommonGLPI
     /**
      * Actualiza el estado nativo del Ticket en GLPI.
      *
-     * - approve → PLANNED ("En curso planificado", estado 3)
-     * - reject  → CLOSED ("Cerrado",              estado 6)
+     * - approve → PLANNED (estado 3) + prefija el título con "[Aprobada por Director]"
+     * - reject  → CLOSED  ("Cerrado", estado 6)
      *
      * @param int    $ticketId
      * @param string $action  'approve' | 'reject'
@@ -131,7 +130,7 @@ class PluginSolicitud extends CommonGLPI
         // Se usa $DB->update() directamente para evitar el chequeo de permisos
         // de Ticket::update(), que requiere un usuario autenticado en sesión.
         $statusMap = [
-            'approve' => 3, // Ticket::PLANNED — "En curso planificado"
+            'approve' => 3, // Ticket::PLANNED — base para "Solicitud aprobada por el director"
             'reject'  => 6, // Ticket::CLOSED  — "Cerrado"
         ];
 
@@ -145,5 +144,25 @@ class PluginSolicitud extends CommonGLPI
             ],
             ['id' => $ticketId]
         );
+
+        // Al aprobar: prefijar el título con "[Aprobada por Director]"
+        // para que sea visible en la lista de tickets de GLPI.
+        if ($action === 'approve') {
+            $rows = $DB->request([
+                'SELECT' => ['name'],
+                'FROM'   => 'glpi_tickets',
+                'WHERE'  => ['id' => $ticketId],
+                'LIMIT'  => 1,
+            ]);
+            foreach ($rows as $row) {
+                if (strpos($row['name'], '[Aprobada por Director]') === false) {
+                    $DB->update(
+                        'glpi_tickets',
+                        ['name' => '[Aprobada por Director] ' . $row['name']],
+                        ['id'   => $ticketId]
+                    );
+                }
+            }
+        }
     }
 }

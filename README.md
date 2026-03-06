@@ -52,7 +52,7 @@ Editar la fila de configuración en la base de datos (o crear un formulario de a
 ```sql
 UPDATE glpi_plugin_solicitud_configs SET
     category_name  = 'Solicitud de Alta de Mail',   -- Nombre exacto de la categoría GLPI
-    approver_email = 'directivo@empresa.com',         -- Email del aprobador
+    approver_email = 'director@empresa.com',         -- Email del aprobador
     it_email       = 'it@empresa.com',                -- Email del área IT
     glpi_base_url  = 'https://glpi.tuempresa.com'     -- URL base de tu GLPI (sin /final)
 WHERE id = 1;
@@ -82,7 +82,7 @@ hook item_add dispara plugin_solicitud_ticket_created()
         │
         ├─ Genera token único (64 chars hex)
         ├─ Lo guarda en glpi_plugin_solicitud_tokens (status=pending)
-        ├─ Envía email HTML al directivo con botones Aprobar/Rechazar
+        ├─ Envía email HTML al director con botones Aprobar/Rechazar
         └─ Agrega seguimiento al ticket: "Solicitud enviada..."
         │
         ▼
@@ -94,9 +94,9 @@ GET /plugins/solicitud/front/approval.php?token=XXX&action=approve
         ├─ Valida token (existe, está en pending, no ha expirado)
         ├─ Actualiza token → approved/rejected
         ├─ Cambia estado del Ticket (PLANNED=3 si aprobado / CLOSED=6 si rechazado)
-        ├─ Agrega seguimiento: "Solicitud APROBADA/RECHAZADA por directivo..."
+        ├─ Agrega seguimiento: "Solicitud APROBADA/RECHAZADA por director..."
         ├─ Envía email al área IT notificando la decisión
-        └─ Muestra página HTML de confirmación al directivo
+        └─ Muestra página HTML de confirmación al director
 ```
 
 ---
@@ -119,7 +119,7 @@ SELECT * FROM glpi_plugin_solicitud_tokens ORDER BY id DESC LIMIT 1;
 
 Debería aparecer un registro con `status = pending` y el token generado.
 
-### Paso 3 — Simular el clic del directivo (sin email)
+### Paso 3 — Simular el clic del director (sin email)
 
 Construir la URL manualmente:
 

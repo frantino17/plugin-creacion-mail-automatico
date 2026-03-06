@@ -1,7 +1,7 @@
 <?php
 /**
  * front/approval.php
- * Endpoint público: procesa la aprobación o rechazo del directivo vía link de email.
+ * Endpoint público: procesa la aprobación o rechazo del director vía link de email.
  *
  * GET /plugins/solicitud/front/approval.php?token=XXXX&action=approve|reject
  *
@@ -124,7 +124,7 @@ if ($action === 'approve') {
 }
 
 // ── 8. Cambiar estado del ticket ──────────────────────────────────────────────
-// approve → 3 (PLANNED / "En curso planificado")
+// approve → 3 (PLANNED) con título actualizado a "Aprobada por Director"
 // reject  → 6 (CLOSED / "Cerrado")
 $newTicketStatus = ($action === 'approve') ? 3 : 6;
 
@@ -132,9 +132,23 @@ $pdo->prepare(
     'UPDATE glpi_tickets SET status = ?, date_mod = ? WHERE id = ?'
 )->execute([$newTicketStatus, $now, $ticketId]);
 
+// Actualizar el título del ticket para reflejar el estado personalizado
+if ($action === 'approve') {
+    $currentName = $pdo->prepare('SELECT name FROM glpi_tickets WHERE id = ? LIMIT 1');
+    $currentName->execute([$ticketId]);
+    $ticketRow = $currentName->fetch();
+    if ($ticketRow && strpos($ticketRow['name'], '[Aprobada por Director]') === false) {
+        $newName = '[Aprobada por Director] ' . $ticketRow['name'];
+        $pdo->prepare('UPDATE glpi_tickets SET name = ? WHERE id = ?')
+            ->execute([$newName, $ticketId]);
+    }
+}
+
 // ── 9. Insertar seguimiento en el ticket ──────────────────────────────────────
 $label   = ($action === 'approve') ? 'APROBADA' : 'RECHAZADA';
-$content = "Solicitud $label por el directivo vía email (plugin Solicitud — acción automática).";
+$content = ($action === 'approve')
+    ? "Solicitud aprobada por el director vía email (plugin Solicitud — acción automática)."
+    : "Solicitud RECHAZADA por el director vía email (plugin Solicitud — acción automática).";
 
 $pdo->prepare(
     'INSERT INTO glpi_itilfollowups
@@ -207,7 +221,7 @@ function _send_computos_notification(PDO $pdo, string $glpiRoot, int $ticketId, 
 <div class='w'>
   <div class='hdr'><h1>&#9989; Solicitud Aprobada &mdash; Alta de Correo</h1></div>
   <div class='bdy'>
-    <p>El directivo ha <strong>aprobado</strong> la solicitud del <strong>Ticket #{$ticketId}</strong>.</p>
+    <p>El director ha <strong>aprobado</strong> la solicitud del <strong>Ticket #{$ticketId}</strong>.</p>
     <div class='box'>Por favor complete el formulario para registrar el correo institucional creado.</div>
     <p>Haga clic en el bot&oacute;n para acceder al formulario. <strong>No es necesario iniciar sesi&oacute;n en GLPI.</strong></p>
     <a href='{$safeUrl}' class='btn'>&#128394; Completar formulario</a>
@@ -253,7 +267,7 @@ function _send_it_notification(PDO $pdo, string $glpiRoot, int $ticketId, string
         $transport->setPassword('6d606c0f591c23');
         $mailer = new \Symfony\Component\Mailer\Mailer($transport);
 
-        $html = "<p>El directivo ha <strong>$label</strong> la solicitud del "
+        $html = "<p>El director ha <strong>$label</strong> la solicitud del "
               . "<strong>Ticket #$ticketId</strong>.</p>"
               . "<p>Por favor, proceda según el resultado.</p>"
               . "<small>Generado automáticamente — $now</small>";
@@ -263,7 +277,7 @@ function _send_it_notification(PDO $pdo, string $glpiRoot, int $ticketId, string
             ->to($itEmail)
             ->subject("Solicitud Ticket #$ticketId: $label")
             ->html($html)
-            ->text("El directivo ha $label la solicitud del Ticket #$ticketId.");
+            ->text("El director ha $label la solicitud del Ticket #$ticketId.");
 
         $mailer->send($email);
 
@@ -288,7 +302,7 @@ function _render_page(string $decision, string $message, int $ticketId): void
             $icon     = '&#10004;';
             $label    = 'Solicitud Aprobada';
             $accent   = '#28a745';
-            $subtitle = 'El ticket ha pasado a estado &ldquo;En curso planificado&rdquo;.';
+            $subtitle = 'El ticket ha pasado a estado &ldquo;Solicitud aprobada por el director&rdquo;.';
             break;
         case 'rejected':
             $icon     = '&#10008;';
