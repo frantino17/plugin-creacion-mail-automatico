@@ -348,8 +348,8 @@ function _notify_requester(
         $transport = new \Symfony\Component\Mailer\Transport\Smtp\EsmtpTransport(
             'sandbox.smtp.mailtrap.io', 2525, false
         );
-        $transport->setUsername('eb62069d99a37b');
-        $transport->setPassword('d93e13c0007f23');
+        $transport->setUsername('c728d26433c791');
+        $transport->setPassword('807c73cb9509b2');
         $mailer = new \Symfony\Component\Mailer\Mailer($transport);
 
         $fullAddress = htmlspecialchars("{$mailCreado}@{$dominio}", ENT_QUOTES);

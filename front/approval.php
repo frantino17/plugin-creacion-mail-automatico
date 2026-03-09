@@ -404,8 +404,8 @@ function _send_it_notification(PDO $pdo, string $glpiRoot, int $ticketId, string
         $transport = new \Symfony\Component\Mailer\Transport\Smtp\EsmtpTransport(
             'sandbox.smtp.mailtrap.io', 2525, false
         );
-        $transport->setUsername('eb62069d99a37b');
-        $transport->setPassword('d93e13c0007f23');
+        $transport->setUsername('c728d26433c791');
+        $transport->setPassword('807c73cb9509b2');
         $mailer = new \Symfony\Component\Mailer\Mailer($transport);
 
         $html = "<p>El director ha <strong>$label</strong> la solicitud del "
