@@ -106,33 +106,22 @@ if ($row['status'] !== 'pending') {
 $newTokenStatus = ($action === 'approve') ? 'approved' : 'rejected';
 $now = date('Y-m-d H:i:s');
 
-// Al aprobar: generar form_token para el formulario de Cómputos
-$formToken = null;
-if ($action === 'approve') {
-    $formToken = bin2hex(random_bytes(32)); // 64 chars hex
-    $pdo->prepare(
-        'UPDATE glpi_plugin_solicitud_tokens
-         SET status = ?, date_action = ?, form_token = ?
-         WHERE token = ?'
-    )->execute([$newTokenStatus, $now, $formToken, $token]);
-} else {
-    $pdo->prepare(
-        'UPDATE glpi_plugin_solicitud_tokens
-         SET status = ?, date_action = ?
-         WHERE token = ?'
-    )->execute([$newTokenStatus, $now, $token]);
-}
+$pdo->prepare(
+    'UPDATE glpi_plugin_solicitud_tokens
+     SET status = ?, date_action = ?
+     WHERE token = ?'
+)->execute([$newTokenStatus, $now, $token]);
 
 // ── 8. Cambiar estado del ticket ──────────────────────────────────────────────
-// approve → 3 (PLANNED) con título actualizado a "Aprobada por Director"
+// approve → el estado final (5 Resuelto) lo gestiona _auto_generate_institutional_email
 // reject  → 6 (CLOSED / "Cerrado")
-$newTicketStatus = ($action === 'approve') ? 3 : 6;
+if ($action === 'reject') {
+    $pdo->prepare(
+        'UPDATE glpi_tickets SET status = 6, date_mod = ? WHERE id = ?'
+    )->execute([$now, $ticketId]);
+}
 
-$pdo->prepare(
-    'UPDATE glpi_tickets SET status = ?, date_mod = ? WHERE id = ?'
-)->execute([$newTicketStatus, $now, $ticketId]);
-
-// Actualizar el título del ticket para reflejar el estado personalizado
+// Prefija el título del ticket al aprobar
 if ($action === 'approve') {
     $currentName = $pdo->prepare('SELECT name FROM glpi_tickets WHERE id = ? LIMIT 1');
     $currentName->execute([$ticketId]);
@@ -157,10 +146,10 @@ $pdo->prepare(
         (?, ?, 0, ?, 0, 0, ?, ?, ?)'
 )->execute(['Ticket', $ticketId, $content, $now, $now, $now]);
 
-// ── 10. Notificar según la decisión ────────────────────────────────────────────────
-if ($action === 'approve' && $formToken !== null) {
-    // Aprobado: enviar email a Cómputos con link al formulario
-    _send_computos_notification($pdo, $glpiRoot, $ticketId, $formToken, $now);
+// ── 10. Acciones tras la decisión ─────────────────────────────────────────────────
+if ($action === 'approve') {
+    // Aprobado: generar correo institucional automáticamente y notificar al solicitante
+    _auto_generate_institutional_email($pdo, $glpiRoot, $ticketId, $now);
 } else {
     // Rechazado: notificar al área IT
     _send_it_notification($pdo, $glpiRoot, $ticketId, $action, $now);
@@ -180,22 +169,163 @@ _render_page($decision, $message, $ticketId);
 // ═════════════════════════════════════════════════════════════════════════════
 
 /**
- * Envía email al área de Cómputos con link al formulario de alta de correo.
+ * Genera automáticamente el correo institucional del solicitante tras la aprobación
+ * del director, usando la inicial del nombre + apellido (incrementando letras si ya existe).
+ * Registra el resultado en el ticket y notifica al solicitante.
  */
-function _send_computos_notification(PDO $pdo, string $glpiRoot, int $ticketId, string $formToken, string $now): void
+function _auto_generate_institutional_email(PDO $pdo, string $glpiRoot, int $ticketId, string $now): void
 {
+    // ── 1. Obtener datos del solicitante ──────────────────────────────────────
+    $stmt = $pdo->prepare(
+        'SELECT u.firstname, u.realname, u.email
+         FROM glpi_tickets_users tu
+         JOIN glpi_users u ON u.id = tu.users_id
+         WHERE tu.tickets_id = ? AND tu.type = 1
+         LIMIT 1'
+    );
+    $stmt->execute([$ticketId]);
+    $user = $stmt->fetch();
+
+    if (!$user) {
+        error_log("[plugin_solicitud] Ticket #$ticketId: no se encontró solicitante para generar email.");
+        return;
+    }
+
+    $firstname = trim($user['firstname'] ?? '');
+    $lastname  = trim($user['realname']  ?? '');
+    $toEmail   = trim($user['email']     ?? '');
+
+    if ($firstname === '' || $lastname === '') {
+        error_log("[plugin_solicitud] Ticket #$ticketId: solicitante sin nombre/apellido completo.");
+        return;
+    }
+
+    // ── 2. Obtener dominio del correo institucional desde la config ───────────
+    $cfg = $pdo->query(
+        'SELECT computos_email FROM glpi_plugin_solicitud_configs LIMIT 1'
+    )->fetch();
+
+    $dominio = 'institucional.com';
+    if (!empty($cfg['computos_email']) && str_contains($cfg['computos_email'], '@')) {
+        $dominio = explode('@', $cfg['computos_email'])[1];
+    }
+
+    // ── 3. Normalizar: sin tildes, lowercase, solo caracteres alfanuméricos ───
+    $normalize = static function (string $s): string {
+        $s = mb_strtolower($s, 'UTF-8');
+        $map = [
+            'á'=>'a','é'=>'e','í'=>'i','ó'=>'o','ú'=>'u',
+            'à'=>'a','è'=>'e','ì'=>'i','ò'=>'o','ù'=>'u',
+            'â'=>'a','ê'=>'e','î'=>'i','ô'=>'o','û'=>'u',
+            'ä'=>'a','ë'=>'e','ï'=>'i','ö'=>'o','ü'=>'u',
+            'ñ'=>'n','ç'=>'c',
+        ];
+        $s = strtr($s, $map);
+        return preg_replace('/[^a-z0-9]/', '', $s);
+    };
+
+    $normFirst = $normalize($firstname);
+    $normLast  = $normalize($lastname);
+
+    // ── 4. Generar nombre de usuario único (1.ª letra, 2.ª letra, ...) ────────
+    $username = null;
+    $maxLen   = mb_strlen($normFirst, 'UTF-8');
+
+    for ($n = 1; $n <= $maxLen; $n++) {
+        $candidate = mb_substr($normFirst, 0, $n, 'UTF-8') . $normLast;
+        $check = $pdo->prepare(
+            'SELECT COUNT(*) AS cnt FROM glpi_users WHERE email = ? OR name = ?'
+        );
+        $check->execute(["$candidate@$dominio", $candidate]);
+        $row = $check->fetch();
+        if ((int)($row['cnt'] ?? 1) === 0) {
+            $username = $candidate;
+            break;
+        }
+    }
+
+    // Si se agotaron las iniciales, añadir sufijo numérico
+    if ($username === null) {
+        $base = $normFirst . $normLast;
+        for ($n = 1; $n < 100; $n++) {
+            $candidate = $base . $n;
+            $check = $pdo->prepare(
+                'SELECT COUNT(*) AS cnt FROM glpi_users WHERE email = ? OR name = ?'
+            );
+            $check->execute(["$candidate@$dominio", $candidate]);
+            $row = $check->fetch();
+            if ((int)($row['cnt'] ?? 1) === 0) {
+                $username = $candidate;
+                break;
+            }
+        }
+        $username = $username ?? ($base . '_' . substr($now, 0, 10));
+    }
+
+    $fullEmail = "$username@$dominio";
+
+    // ── 5. Generar contraseña temporal aleatoria ──────────────────────────────
+    $chars    = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#';
+    $password = '';
+    for ($i = 0; $i < 12; $i++) {
+        $password .= $chars[random_int(0, strlen($chars) - 1)];
+    }
+
+    // ── 6. Agregar followup privado con los datos del correo ──────────────────
+    $followupContent =
+        "Correo institucional generado automáticamente:\n\n" .
+        "  • Correo : $fullEmail\n" .
+        "  • Contraseña: $password\n\n" .
+        "Acción automática ejecutada tras la aprobación del director (plugin Solicitud).";
+
+    $pdo->prepare(
+        'INSERT INTO glpi_itilfollowups
+            (itemtype, items_id, users_id, content, is_private, requesttypes_id, date, date_creation, date_mod)
+         VALUES (?, ?, 0, ?, 1, 0, ?, ?, ?)'
+    )->execute(['Ticket', $ticketId, $followupContent, $now, $now, $now]);
+
+    // ── 7. Agregar solución técnica ───────────────────────────────────────────
+    $solutionContent =
+        "Correo institucional creado exitosamente.\n\n" .
+        "  • Dirección : $fullEmail\n" .
+        "  • Contraseña entregada al solicitante.\n\n" .
+        "Pendiente de confirmación por el solicitante.";
+
+    $existsSol = $pdo->prepare(
+        'SELECT id FROM glpi_itilsolutions WHERE itemtype = ? AND items_id = ? LIMIT 1'
+    );
+    $existsSol->execute(['Ticket', $ticketId]);
+    if (!$existsSol->fetch()) {
+        $pdo->prepare(
+            'INSERT INTO glpi_itilsolutions
+                (itemtype, items_id, users_id, content, solutiontypes_id, status, date_creation, date_mod, date_approval)
+             VALUES (?, ?, 0, ?, 0, 3, ?, ?, ?)'
+        )->execute(['Ticket', $ticketId, $solutionContent, $now, $now, $now]);
+    }
+
+    // ── 8. Pasar ticket a estado Resuelto (5) ─────────────────────────────────
+    $pdo->prepare(
+        'UPDATE glpi_tickets SET status = 5, date_mod = ?, solvedate = ? WHERE id = ?'
+    )->execute([$now, $now, $ticketId]);
+
+    // ── 9. Notificar al solicitante por email ─────────────────────────────────
+    if ($toEmail !== '') {
+        _notify_requester_auto($glpiRoot, $ticketId, $toEmail, $fullEmail, $password, $now);
+    }
+}
+
+/**
+ * Envía email al solicitante con los datos del correo institucional generado automáticamente.
+ */
+function _notify_requester_auto(
+    string $glpiRoot,
+    int    $ticketId,
+    string $toEmail,
+    string $fullEmail,
+    string $password,
+    string $now
+): void {
     try {
-        $cfg = $pdo->query(
-            'SELECT computos_email, glpi_base_url FROM glpi_plugin_solicitud_configs LIMIT 1'
-        )->fetch();
-
-        $computosEmail = $cfg['computos_email'] ?? '';
-        $baseUrl       = rtrim($cfg['glpi_base_url'] ?? '', '/');
-        if ($computosEmail === '') return;
-
-        $formUrl = "$baseUrl/plugins/solicitud/front/form.php?form_token=$formToken";
-        $safeUrl = htmlspecialchars($formUrl, ENT_QUOTES);
-
         require_once $glpiRoot . '/vendor/autoload.php';
         $transport = new \Symfony\Component\Mailer\Transport\Smtp\EsmtpTransport(
             'sandbox.smtp.mailtrap.io', 2525, false
@@ -204,43 +334,53 @@ function _send_computos_notification(PDO $pdo, string $glpiRoot, int $ticketId, 
         $transport->setPassword('6d606c0f591c23');
         $mailer = new \Symfony\Component\Mailer\Mailer($transport);
 
+        $safeEmail = htmlspecialchars($fullEmail, ENT_QUOTES);
+
         $html = "
 <!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'>
 <style>
   body{font-family:Arial,sans-serif;background:#f0f2f5;padding:30px;margin:0}
   .w{max-width:600px;margin:auto}
-  .hdr{background:#28a745;color:#fff;padding:22px 28px;border-radius:8px 8px 0 0}
+  .hdr{background:#2d6cdf;color:#fff;padding:22px 28px;border-radius:8px 8px 0 0}
   .hdr h1{font-size:19px;margin:0}
   .bdy{background:#fff;padding:28px;border:1px solid #dde3ec;border-top:none;color:#444;line-height:1.6}
-  .box{background:#f7fff9;border-left:4px solid #28a745;padding:12px 16px;margin:16px 0;border-radius:0 6px 6px 0}
-  .btn{display:inline-block;padding:14px 34px;background:#2d6cdf;color:#fff;
-       text-decoration:none;border-radius:6px;font-weight:700;font-size:15px;margin-top:20px}
+  .data-box{background:#f7f9ff;border-left:4px solid #2d6cdf;padding:14px 20px;
+             margin:18px 0;border-radius:0 6px 6px 0;font-size:15px}
+  .data-box dt{font-weight:700;color:#2d6cdf;margin-top:8px}
+  .data-box dd{margin:2px 0 0 0;color:#333}
+  .warn{font-size:12px;color:#888;margin-top:18px;border-top:1px solid #eee;padding-top:12px}
   .ftr{background:#f7f9ff;padding:14px 28px;border:1px solid #dde3ec;border-top:none;
        border-radius:0 0 8px 8px;font-size:12px;color:#888}
 </style></head><body>
 <div class='w'>
-  <div class='hdr'><h1>&#9989; Solicitud Aprobada &mdash; Alta de Correo</h1></div>
+  <div class='hdr'><h1>&#9993; Tu correo institucional fue creado</h1></div>
   <div class='bdy'>
-    <p>El director ha <strong>aprobado</strong> la solicitud del <strong>Ticket #{$ticketId}</strong>.</p>
-    <div class='box'>Por favor complete el formulario para registrar el correo institucional creado.</div>
-    <p>Haga clic en el bot&oacute;n para acceder al formulario. <strong>No es necesario iniciar sesi&oacute;n en GLPI.</strong></p>
-    <a href='{$safeUrl}' class='btn'>&#128394; Completar formulario</a>
-    <p style='margin-top:20px;font-size:12px;color:#888'>O copie este enlace:<br>{$safeUrl}</p>
+    <p>Tu solicitud del <strong>Ticket #{$ticketId}</strong> ha sido aprobada y procesada.<br>
+       A continuaci&oacute;n encontrar&aacute;s los datos de acceso a tu nuevo correo institucional:</p>
+    <dl class='data-box'>
+      <dt>Direcci&oacute;n de correo</dt>
+      <dd>{$safeEmail}</dd>
+      <dt>Contrase&ntilde;a inicial</dt>
+      <dd>{$password}</dd>
+    </dl>
+    <p>Te recomendamos cambiar tu contrase&ntilde;a la primera vez que ingreses.</p>
+    <p class='warn'>Este mensaje es confidencial. No lo reenv&iacute;es.<br>
+       Si no solicitaste un correo institucional, comunicate con el &aacute;rea de Sistemas.</p>
   </div>
   <div class='ftr'>Generado autom&aacute;ticamente &mdash; {$now}</div>
 </div></body></html>";
 
-        $email = (new \Symfony\Component\Mime\Email())
+        $emailMsg = (new \Symfony\Component\Mime\Email())
             ->from('noreply@glpi.local')
-            ->to($computosEmail)
-            ->subject("Alta de Correo Institucional \u2014 Ticket #$ticketId: APROBADA")
+            ->to($toEmail)
+            ->subject("Tu correo institucional fue creado — Ticket #$ticketId")
             ->html($html)
-            ->text("Solicitud aprobada. Complete el formulario en: $formUrl");
+            ->text("Tu correo institucional: $fullEmail | Contraseña: $password");
 
-        $mailer->send($email);
+        $mailer->send($emailMsg);
 
     } catch (\Throwable $e) {
-        error_log('[plugin_solicitud] Error enviando email Computos: ' . $e->getMessage());
+        error_log('[plugin_solicitud] Error notificando solicitante (auto): ' . $e->getMessage());
     }
 }
 
@@ -399,7 +539,7 @@ HTML;
         echo "    <span class=\"ticket-ref\">#$ticketId</span>\n";
     }
     if ($isSuccess) {
-        echo "    <p>El &aacute;rea de IT ha sido notificada autom&aacute;ticamente. "
+        echo "    <p>Las notificaciones correspondientes han sido enviadas autom&aacute;ticamente. "
            . "No es necesario realizar ninguna acci&oacute;n adicional.</p>\n";
     }
 

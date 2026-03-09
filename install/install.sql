@@ -53,4 +53,4 @@ CREATE TABLE IF NOT EXISTS `glpi_plugin_solicitud_configs` (
 INSERT IGNORE INTO `glpi_plugin_solicitud_configs`
     (`category_name`, `approver_email`, `it_email`, `computos_email`, `glpi_base_url`)
 VALUES
-    ('Solicitud de Alta de Mail', 'director@empresa.com', 'it@empresa.com', 'computos@empresa.com', 'https://glpi.local');
+    ('Solicitud de creacion de mail', 'director@empresa.com', 'it@empresa.com', 'computos@empresa.com', 'https://glpi.local');

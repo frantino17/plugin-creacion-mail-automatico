@@ -86,7 +86,7 @@ function plugin_solicitud_install(): bool
 
         if (countElementsInTable('glpi_plugin_solicitud_configs') === 0) {
             $DB->insert('glpi_plugin_solicitud_configs', [
-                'category_name'  => 'Solicitud de Alta de Mail',
+                'category_name'  => 'Solicitud de creacion de mail',
                 'approver_email' => 'director@empresa.com',
                 'it_email'       => 'it@empresa.com',
                 'computos_email' => 'computos@empresa.com',

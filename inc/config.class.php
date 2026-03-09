@@ -26,7 +26,7 @@ class PluginSolicitudConfig extends CommonDBTM
         global $DB;
 
         $defaults = [
-            'category_name'  => 'Solicitud de Alta de Mail',
+            'category_name'  => 'Solicitud de creacion de mail',
             'approver_email' => '',
             'it_email'       => '',
             'glpi_base_url'  => 'https://glpi.local',

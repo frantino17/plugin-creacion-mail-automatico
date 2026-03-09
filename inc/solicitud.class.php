@@ -95,10 +95,14 @@ class PluginSolicitud extends CommonGLPI
             : 'Solicitud RECHAZADA por el director vía email (acción automatizada por plugin Solicitud).';
         plugin_solicitud_add_followup($ticketId, $followupContent);
 
-        // 7. Notificar al área IT
-        $config = PluginSolicitudConfig::getConfig();
-        if (!empty($config['it_email'])) {
-            plugin_solicitud_notify_it($config['it_email'], $ticketId, $action);
+        // 7. En caso de rechazo, notificar al área IT
+        //    En caso de aprobación, el email institucional se genera automáticamente
+        //    (ver approval.php → _auto_generate_institutional_email).
+        if ($action === 'reject') {
+            $config = PluginSolicitudConfig::getConfig();
+            if (!empty($config['it_email'])) {
+                plugin_solicitud_notify_it($config['it_email'], $ticketId, $action);
+            }
         }
 
         $humanAction = ($action === 'approve') ? 'aprobada' : 'rechazada';
