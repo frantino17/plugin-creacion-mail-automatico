@@ -88,7 +88,7 @@ HTML;
 // ─── Función genérica de envío ────────────────────────────────────────────────
 
 /**
- * Envía un email usando GLPIMailer (PHPMailer de GLPI).
+ * Envía un email usando Symfony Mailer con Mailtrap como SMTP.
  *
  * @param string $to       Destinatario.
  * @param string $subject  Asunto.
@@ -96,28 +96,27 @@ HTML;
  */
 function plugin_solicitud_send_email(string $to, string $subject, string $html): void
 {
-    global $CFG_GLPI;
-
     try {
-        $mailer = new GLPIMailer();
+        require_once GLPI_ROOT . '/vendor/autoload.php';
 
-        // Remitente: usa la configuración de GLPI (forzar string, nunca null)
-        $fromEmail = (string) ($CFG_GLPI['admin_email']      ?? 'noreply@glpi.local');
-        $fromName  = (string) ($CFG_GLPI['admin_email_name'] ?? 'GLPI');
-        if ($fromName === '') {
-            $fromName = 'GLPI';
-        }
-
-        $mailer->setFrom($fromEmail, $fromName);
-        $mailer->addAddress($to, '');   // segundo arg '' obligatorio en GLPI 11
-        $mailer->isHTML(true);
-        $mailer->Subject = $subject;
-        $mailer->Body    = $html;
-        $mailer->AltBody = strip_tags(
-            str_replace(['<br>', '<br/>', '<br />'], "\n", $html)
+        $transport = new \Symfony\Component\Mailer\Transport\Smtp\EsmtpTransport(
+            'sandbox.smtp.mailtrap.io', 2525, false
         );
+        $transport->setUsername('cffec8d0d2e053');
+        $transport->setPassword('6d606c0f591c23');
 
-        $result = $mailer->send();
+        $mailer = new \Symfony\Component\Mailer\Mailer($transport);
+
+        $altBody = strip_tags(str_replace(['<br>', '<br/>', '<br />'], "\n", $html));
+
+        $email = (new \Symfony\Component\Mime\Email())
+            ->from('noreply@glpi.local')
+            ->to($to)
+            ->subject($subject)
+            ->html($html)
+            ->text($altBody);
+
+        $mailer->send($email);
 
         // Log de éxito
         file_put_contents(
@@ -130,10 +129,7 @@ function plugin_solicitud_send_email(string $to, string $subject, string $html):
         // Log del error real en archivo dedicado
         file_put_contents(
             GLPI_LOG_DIR . '/plugin_solicitud_mail.log',
-            date('[Y-m-d H:i:s]') . " ERROR enviando a $to: " . $e->getMessage() . "\n"
-            . "  SMTP host: " . ($CFG_GLPI['smtp_host'] ?? 'NO CONFIGURADO') . "\n"
-            . "  SMTP port: " . ($CFG_GLPI['smtp_port'] ?? 'NO CONFIGURADO') . "\n"
-            . "  Notif mail: " . ($CFG_GLPI['use_notifications'] ?? 'NO') . "\n",
+            date('[Y-m-d H:i:s]') . " ERROR enviando a $to: " . $e->getMessage() . "\n",
             FILE_APPEND
         );
     }
