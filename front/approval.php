@@ -330,8 +330,8 @@ function _notify_requester_auto(
         $transport = new \Symfony\Component\Mailer\Transport\Smtp\EsmtpTransport(
             'sandbox.smtp.mailtrap.io', 2525, false
         );
-        $transport->setUsername('cffec8d0d2e053');
-        $transport->setPassword('6d606c0f591c23');
+        $transport->setUsername('eb62069d99a37b');
+        $transport->setPassword('d93e13c0007f23');
         $mailer = new \Symfony\Component\Mailer\Mailer($transport);
 
         $safeEmail = htmlspecialchars($fullEmail, ENT_QUOTES);
@@ -403,8 +403,8 @@ function _send_it_notification(PDO $pdo, string $glpiRoot, int $ticketId, string
         $transport = new \Symfony\Component\Mailer\Transport\Smtp\EsmtpTransport(
             'sandbox.smtp.mailtrap.io', 2525, false
         );
-        $transport->setUsername('cffec8d0d2e053');
-        $transport->setPassword('6d606c0f591c23');
+        $transport->setUsername('eb62069d99a37b');
+        $transport->setPassword('d93e13c0007f23');
         $mailer = new \Symfony\Component\Mailer\Mailer($transport);
 
         $html = "<p>El director ha <strong>$label</strong> la solicitud del "
