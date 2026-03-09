@@ -41,6 +41,8 @@ CREATE TABLE IF NOT EXISTS `glpi_plugin_solicitud_configs` (
                           COMMENT 'Email del área IT para recibir notificaciones',
     `computos_email`  VARCHAR(255)    NOT NULL DEFAULT ''
                           COMMENT 'Email del área de Cómputos para recibir el formulario de alta',
+    `mail_domain`     VARCHAR(255)    NOT NULL DEFAULT 'institucional.com'
+                          COMMENT 'Dominio para los correos institucionales generados automáticamente',
     `glpi_base_url`   VARCHAR(255)    NOT NULL DEFAULT 'https://glpi.local'
                           COMMENT 'URL base de GLPI (sin barra final)',
     PRIMARY KEY (`id`)
@@ -51,6 +53,6 @@ CREATE TABLE IF NOT EXISTS `glpi_plugin_solicitud_configs` (
 
 -- ── Fila de configuración por defecto ─────────────────────────────────────────
 INSERT IGNORE INTO `glpi_plugin_solicitud_configs`
-    (`category_name`, `approver_email`, `it_email`, `computos_email`, `glpi_base_url`)
+    (`category_name`, `approver_email`, `it_email`, `computos_email`, `mail_domain`, `glpi_base_url`)
 VALUES
-    ('Solicitud de creacion de mail', 'director@empresa.com', 'it@empresa.com', 'computos@empresa.com', 'https://glpi.local');
+    ('Solicitud de creacion de mail', 'director@empresa.com', 'it@empresa.com', 'computos@empresa.com', 'institucional.com', 'https://glpi.local');

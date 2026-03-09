@@ -83,6 +83,13 @@ function plugin_solicitud_install(): bool
                         AFTER `it_email`
             ");
         }
+        if (!$DB->fieldExists('glpi_plugin_solicitud_configs', 'mail_domain')) {
+            $DB->doQuery("
+                ALTER TABLE `glpi_plugin_solicitud_configs`
+                    ADD COLUMN `mail_domain` VARCHAR(255) NOT NULL DEFAULT 'institucional.com'
+                        AFTER `computos_email`
+            ");
+        }
 
         if (countElementsInTable('glpi_plugin_solicitud_configs') === 0) {
             $DB->insert('glpi_plugin_solicitud_configs', [
@@ -90,6 +97,7 @@ function plugin_solicitud_install(): bool
                 'approver_email' => 'director@empresa.com',
                 'it_email'       => 'it@empresa.com',
                 'computos_email' => 'computos@empresa.com',
+                'mail_domain'    => 'institucional.com',
                 'glpi_base_url'  => 'https://glpi.local',
             ]);
         }

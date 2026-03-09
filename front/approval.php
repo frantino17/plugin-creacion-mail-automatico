@@ -171,11 +171,43 @@ _render_page($decision, $message, $ticketId);
 /**
  * Genera automáticamente el correo institucional del solicitante tras la aprobación
  * del director, usando la inicial del nombre + apellido (incrementando letras si ya existe).
+ * Prioriza los campos del formulario GLPI (Nombre, Apellido, Email) en la descripción
+ * del ticket; si no están, usa los datos del usuario GLPI.
  * Registra el resultado en el ticket y notifica al solicitante.
  */
 function _auto_generate_institutional_email(PDO $pdo, string $glpiRoot, int $ticketId, string $now): void
 {
-    // ── 1. Obtener datos del solicitante ──────────────────────────────────────
+    // ── 1. Leer descripción del ticket para extraer campos del formulario ─────
+    $tStmt = $pdo->prepare('SELECT content FROM glpi_tickets WHERE id = ? LIMIT 1');
+    $tStmt->execute([$ticketId]);
+    $tRow = $tStmt->fetch();
+    $description = $tRow['content'] ?? '';
+
+    // Normaliza HTML a texto plano para el parser
+    $plainDesc = html_entity_decode(strip_tags(str_replace(['<br>', '<br/>', '<br />', '</p>', '</div>'], "\n", $description)), ENT_QUOTES, 'UTF-8');
+
+    /**
+     * Extrae el valor de un campo del formulario buscando el patrón:
+     *   "Nombre : Valor" o "Nombre: Valor" (insensible a tildes y mayúsculas)
+     */
+    $extractField = static function (string $text, array $labels): string {
+        foreach ($labels as $label) {
+            // Busca el label seguido de ":" y el valor en la misma línea
+            if (preg_match('/\b' . preg_quote($label, '/') . '\s*:?\s*(.+)/iu', $text, $m)) {
+                $val = trim($m[1]);
+                // Quitar posibles artefactos de parseo
+                $val = preg_replace('/\s*\|.*$/', '', $val); // quitar "| otro campo"
+                return trim($val);
+            }
+        }
+        return '';
+    };
+
+    $formNombre   = $extractField($plainDesc, ['Nombre']);
+    $formApellido = $extractField($plainDesc, ['Apellido']);
+    $formEmail    = $extractField($plainDesc, ['Email', 'E-mail', 'Correo']);
+
+    // ── 2. Obtener datos del usuario GLPI (fallback) ──────────────────────────
     $stmt = $pdo->prepare(
         'SELECT u.firstname, u.realname, u.email
          FROM glpi_tickets_users tu
@@ -186,31 +218,24 @@ function _auto_generate_institutional_email(PDO $pdo, string $glpiRoot, int $tic
     $stmt->execute([$ticketId]);
     $user = $stmt->fetch();
 
-    if (!$user) {
-        error_log("[plugin_solicitud] Ticket #$ticketId: no se encontró solicitante para generar email.");
-        return;
-    }
-
-    $firstname = trim($user['firstname'] ?? '');
-    $lastname  = trim($user['realname']  ?? '');
-    $toEmail   = trim($user['email']     ?? '');
+    // ── 3. Resolver valores finales: formulario tiene prioridad ──────────────
+    $firstname = $formNombre   !== '' ? $formNombre   : trim($user['firstname'] ?? '');
+    $lastname  = $formApellido !== '' ? $formApellido : trim($user['realname']  ?? '');
+    $toEmail   = $formEmail    !== '' ? $formEmail    : trim($user['email']     ?? '');
 
     if ($firstname === '' || $lastname === '') {
-        error_log("[plugin_solicitud] Ticket #$ticketId: solicitante sin nombre/apellido completo.");
+        error_log("[plugin_solicitud] Ticket #$ticketId: no se pudo determinar nombre/apellido del solicitante.");
         return;
     }
 
-    // ── 2. Obtener dominio del correo institucional desde la config ───────────
+    // ── 4. Obtener dominio institucional desde la config ─────────────────────
     $cfg = $pdo->query(
-        'SELECT computos_email FROM glpi_plugin_solicitud_configs LIMIT 1'
+        'SELECT mail_domain FROM glpi_plugin_solicitud_configs LIMIT 1'
     )->fetch();
 
-    $dominio = 'institucional.com';
-    if (!empty($cfg['computos_email']) && str_contains($cfg['computos_email'], '@')) {
-        $dominio = explode('@', $cfg['computos_email'])[1];
-    }
+    $dominio = ($cfg['mail_domain'] ?? '') !== '' ? $cfg['mail_domain'] : 'institucional.com';
 
-    // ── 3. Normalizar: sin tildes, lowercase, solo caracteres alfanuméricos ───
+    // ── 5. Normalizar: sin tildes, lowercase, solo caracteres alfanuméricos ───
     $normalize = static function (string $s): string {
         $s = mb_strtolower($s, 'UTF-8');
         $map = [
@@ -227,7 +252,7 @@ function _auto_generate_institutional_email(PDO $pdo, string $glpiRoot, int $tic
     $normFirst = $normalize($firstname);
     $normLast  = $normalize($lastname);
 
-    // ── 4. Generar nombre de usuario único (1.ª letra, 2.ª letra, ...) ────────
+    // ── 6. Generar nombre de usuario único (1.ª letra, 2.ª letra, ...) ────────
     $username = null;
     $maxLen   = mb_strlen($normFirst, 'UTF-8');
 
@@ -264,14 +289,14 @@ function _auto_generate_institutional_email(PDO $pdo, string $glpiRoot, int $tic
 
     $fullEmail = "$username@$dominio";
 
-    // ── 5. Generar contraseña temporal aleatoria ──────────────────────────────
+    // ── 7. Generar contraseña temporal aleatoria ──────────────────────────────
     $chars    = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#';
     $password = '';
     for ($i = 0; $i < 12; $i++) {
         $password .= $chars[random_int(0, strlen($chars) - 1)];
     }
 
-    // ── 6. Agregar followup privado con los datos del correo ──────────────────
+    // ── 8. Agregar followup privado con los datos del correo ──────────────────
     $followupContent =
         "Correo institucional generado automáticamente:\n\n" .
         "  • Correo : $fullEmail\n" .
@@ -284,7 +309,7 @@ function _auto_generate_institutional_email(PDO $pdo, string $glpiRoot, int $tic
          VALUES (?, ?, 0, ?, 1, 0, ?, ?, ?)'
     )->execute(['Ticket', $ticketId, $followupContent, $now, $now, $now]);
 
-    // ── 7. Agregar solución técnica ───────────────────────────────────────────
+    // ── 9. Agregar solución técnica ───────────────────────────────────────────
     $solutionContent =
         "Correo institucional creado exitosamente.\n\n" .
         "  • Dirección : $fullEmail\n" .
@@ -303,12 +328,12 @@ function _auto_generate_institutional_email(PDO $pdo, string $glpiRoot, int $tic
         )->execute(['Ticket', $ticketId, $solutionContent, $now, $now, $now]);
     }
 
-    // ── 8. Pasar ticket a estado Resuelto (5) ─────────────────────────────────
+    // ── 10. Pasar ticket a estado Resuelto (5) ─────────────────────────────────
     $pdo->prepare(
         'UPDATE glpi_tickets SET status = 5, date_mod = ?, solvedate = ? WHERE id = ?'
     )->execute([$now, $now, $ticketId]);
 
-    // ── 9. Notificar al solicitante por email ─────────────────────────────────
+    // ── 11. Notificar al solicitante por email ─────────────────────────────────
     if ($toEmail !== '') {
         _notify_requester_auto($glpiRoot, $ticketId, $toEmail, $fullEmail, $password, $now);
     }

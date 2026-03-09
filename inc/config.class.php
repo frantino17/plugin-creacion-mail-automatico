@@ -29,6 +29,8 @@ class PluginSolicitudConfig extends CommonDBTM
             'category_name'  => 'Solicitud de creacion de mail',
             'approver_email' => '',
             'it_email'       => '',
+            'computos_email' => '',
+            'mail_domain'    => 'institucional.com',
             'glpi_base_url'  => 'https://glpi.local',
         ];
 
@@ -54,7 +56,7 @@ class PluginSolicitudConfig extends CommonDBTM
         /** @var \DBmysql $DB */
         global $DB;
 
-        $allowed = ['category_name', 'approver_email', 'it_email', 'glpi_base_url'];
+        $allowed = ['category_name', 'approver_email', 'it_email', 'computos_email', 'mail_domain', 'glpi_base_url'];
         $clean   = array_intersect_key($data, array_flip($allowed));
 
         $existing = $DB->request([
