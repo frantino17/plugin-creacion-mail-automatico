@@ -140,7 +140,7 @@ if ($action === 'approve') {
 // ── 9. Insertar seguimiento en el ticket ──────────────────────────────────────
 $label   = ($action === 'approve') ? 'APROBADA' : 'RECHAZADA';
 $content = ($action === 'approve')
-    ? "Solicitud aprobada por el director vía email. En espera de que el área IT cierre el ticket para generar y enviar el correo institucional al solicitante (plugin Solicitud)."
+    ? "Solicitud aprobada por el director vía email. En espera de que STID cierre el ticket para generar y enviar el correo institucional al solicitante."
     : "Solicitud RECHAZADA por el director vía email (plugin Solicitud — acción automática).";
 
 $pdo->prepare(

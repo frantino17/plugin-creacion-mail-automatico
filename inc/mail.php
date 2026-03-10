@@ -428,9 +428,9 @@ function plugin_solicitud_generate_and_notify_requester(int $ticketId): void
         // ── 8. Followup privado con credenciales ──────────────────────────────
         $followupContent =
             "Correo institucional generado automáticamente al cierre del ticket:\n\n" .
-            "  • Correo    : $fullEmail\n" .
-            "  • Contraseña: $password\n\n" .
-            "Acción ejecutada automáticamente por el plugin Solicitud tras el cierre por IT.";
+            "  • Correo : $fullEmail\n\n" .
+            "La contraseña fue enviada directamente al solicitante por email (no se almacena aquí).\n" .
+            "Acción ejecutada automáticamente por el plugin Solicitud tras el cierre por STID.";
 
         plugin_solicitud_add_followup_private($ticketId, $followupContent);
 
