@@ -100,7 +100,7 @@ function plugin_solicitud_send_email(string $to, string $subject, string $html):
         require_once GLPI_ROOT . '/vendor/autoload.php';
 
         $transport = new \Symfony\Component\Mailer\Transport\Smtp\EsmtpTransport(
-            'sandbox.smtp.mailtrap.io', 2525, false
+            'sandbox.smtp.mailtrap.io', 2525, null  // null = STARTTLS auto-negociado
         );
         $transport->setUsername('c728d26433c791');
         $transport->setPassword('807c73cb9509b2');
