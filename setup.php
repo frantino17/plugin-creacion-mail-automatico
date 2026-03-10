@@ -78,7 +78,11 @@ function plugin_init_solicitud(): void
         $PLUGIN_HOOKS['item_add']['solicitud'] = [
             'Ticket' => 'plugin_solicitud_ticket_created',
         ];
-
+        // ── Hook: se ejecuta cuando se ACTUALIZA un ticket ────────────────
+        // Detecta el cierre (status=6) por IT para enviar el correo institucional.
+        $PLUGIN_HOOKS['item_update']['solicitud'] = [
+            'Ticket' => 'plugin_solicitud_ticket_updated',
+        ];
         // ── Registro de clases del plugin ─────────────────────────────────────
         Plugin::registerClass('PluginSolicitudApprovalToken');
         Plugin::registerClass('PluginSolicitudConfig');

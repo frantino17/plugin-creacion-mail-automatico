@@ -113,9 +113,13 @@ $pdo->prepare(
 )->execute([$newTokenStatus, $now, $token]);
 
 // ── 8. Cambiar estado del ticket ──────────────────────────────────────────────
-// approve → el estado final (5 Resuelto) lo gestiona _auto_generate_institutional_email
+// approve → 5 (Resuelto), queda a la espera de que IT cierre y genere el correo
 // reject  → 6 (CLOSED / "Cerrado")
-if ($action === 'reject') {
+if ($action === 'approve') {
+    $pdo->prepare(
+        'UPDATE glpi_tickets SET status = 5, date_mod = ? WHERE id = ?'
+    )->execute([$now, $ticketId]);
+} else {
     $pdo->prepare(
         'UPDATE glpi_tickets SET status = 6, date_mod = ? WHERE id = ?'
     )->execute([$now, $ticketId]);
@@ -136,7 +140,7 @@ if ($action === 'approve') {
 // ── 9. Insertar seguimiento en el ticket ──────────────────────────────────────
 $label   = ($action === 'approve') ? 'APROBADA' : 'RECHAZADA';
 $content = ($action === 'approve')
-    ? "Solicitud aprobada por el director vía email (plugin Solicitud — acción automática)."
+    ? "Solicitud aprobada por el director vía email. En espera de que el área IT cierre el ticket para generar y enviar el correo institucional al solicitante (plugin Solicitud)."
     : "Solicitud RECHAZADA por el director vía email (plugin Solicitud — acción automática).";
 
 $pdo->prepare(
@@ -147,17 +151,15 @@ $pdo->prepare(
 )->execute(['Ticket', $ticketId, $content, $now, $now, $now]);
 
 // ── 10. Acciones tras la decisión ─────────────────────────────────────────────────
-if ($action === 'approve') {
-    // Aprobado: generar correo institucional automáticamente y notificar al solicitante
-    _auto_generate_institutional_email($pdo, $glpiRoot, $ticketId, $now);
-} else {
+// approve → el correo institucional se genera cuando IT cierre el ticket (hook item_update)
+if ($action === 'reject') {
     // Rechazado: notificar al área IT
     _send_it_notification($pdo, $glpiRoot, $ticketId, $action, $now);
 }
 
 // ── 11. Renderizar página de confirmación ─────────────────────────────────────
 $message  = ($action === 'approve')
-    ? 'La solicitud ha sido aprobada correctamente.'
+    ? 'La solicitud ha sido aprobada correctamente. El correo institucional será generado y enviado al solicitante una vez que el área IT cierre el ticket.'
     : 'La solicitud ha sido rechazada correctamente.';
 $decision = $newTokenStatus;
 

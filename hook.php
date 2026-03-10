@@ -197,3 +197,54 @@ function plugin_solicitud_ticket_created(Ticket $ticket): void
         . 'Esperando respuesta.'
     );
 }
+
+// ─── Hook: ticket actualizado ─────────────────────────────────────────────────
+
+/**
+ * Se ejecuta automáticamente cuando GLPI actualiza un Ticket.
+ * Detecta cuando el personal de IT cierra (status=6) un ticket aprobado por
+ * el director y dispara el envío del correo institucional al solicitante.
+ *
+ * @param Ticket $ticket  Objeto Ticket tras la actualización.
+ */
+function plugin_solicitud_ticket_updated(Ticket $ticket): void
+{
+    /** @var \DBmysql $DB */
+    global $DB;
+
+    // ── 1. Solo nos interesa cuando el estado cambia a 6 (Cerrado) ────────────
+    if (!isset($ticket->oldvalues['status'])) {
+        return;
+    }
+    if ((int) $ticket->fields['status'] !== 6) {
+        return;
+    }
+
+    $ticketId = (int) $ticket->fields['id'];
+
+    // ── 2. Verificar que este ticket tenga un token en estado 'approved' ──────
+    $tokenRow = $DB->request([
+        'FROM'  => 'glpi_plugin_solicitud_tokens',
+        'WHERE' => [
+            'tickets_id' => $ticketId,
+            'status'     => 'approved',
+        ],
+        'LIMIT' => 1,
+    ])->current();
+
+    if (!$tokenRow) {
+        // No es un ticket gestionado por este plugin, o ya fue procesado
+        return;
+    }
+
+    // ── 3. Marcar el token como 'email_sent' ANTES de enviar ─────────────────
+    //      para evitar doble envío si el hook se dispara más de una vez.
+    $DB->update(
+        'glpi_plugin_solicitud_tokens',
+        ['status' => 'email_sent'],
+        ['id'     => $tokenRow['id']]
+    );
+
+    // ── 4. Generar correo institucional y notificar al solicitante ────────────
+    plugin_solicitud_generate_and_notify_requester($ticketId);
+}
