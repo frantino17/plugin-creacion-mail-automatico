@@ -177,6 +177,14 @@ _render_page($decision, $message, $ticketId);
  */
 function _auto_generate_institutional_email(PDO $pdo, string $glpiRoot, int $ticketId, string $now): void
 {
+    $logDir = $glpiRoot . '/files/_log';
+    $logFile = $logDir . '/plugin_solicitud_mail.log';
+    $log = static function (string $msg) use ($logFile): void {
+        file_put_contents($logFile, date('[Y-m-d H:i:s]') . " [auto_gen] $msg\n", FILE_APPEND);
+    };
+
+    try {
+
     // ── 1. Leer descripción del ticket para extraer campos del formulario ─────
     $tStmt = $pdo->prepare('SELECT content FROM glpi_tickets WHERE id = ? LIMIT 1');
     $tStmt->execute([$ticketId]);
@@ -223,8 +231,10 @@ function _auto_generate_institutional_email(PDO $pdo, string $glpiRoot, int $tic
     $lastname  = $formApellido !== '' ? $formApellido : trim($user['realname']  ?? '');
     $toEmail   = $formEmail    !== '' ? $formEmail    : trim($user['email']     ?? '');
 
+    $log("Ticket #$ticketId — nombre=[$firstname] apellido=[$lastname] email=[$toEmail]");
+
     if ($firstname === '' || $lastname === '') {
-        error_log("[plugin_solicitud] Ticket #$ticketId: no se pudo determinar nombre/apellido del solicitante.");
+        $log("Ticket #$ticketId ERROR: no se pudo determinar nombre/apellido.");
         return;
     }
 
@@ -259,7 +269,9 @@ function _auto_generate_institutional_email(PDO $pdo, string $glpiRoot, int $tic
     for ($n = 1; $n <= $maxLen; $n++) {
         $candidate = mb_substr($normFirst, 0, $n, 'UTF-8') . $normLast;
         $check = $pdo->prepare(
-            'SELECT COUNT(*) AS cnt FROM glpi_users WHERE email = ? OR name = ?'
+            'SELECT COUNT(*) AS cnt FROM glpi_users u
+             LEFT JOIN glpi_useremails ue ON ue.users_id = u.id
+             WHERE ue.email = ? OR u.name = ?'
         );
         $check->execute(["$candidate@$dominio", $candidate]);
         $row = $check->fetch();
@@ -275,7 +287,9 @@ function _auto_generate_institutional_email(PDO $pdo, string $glpiRoot, int $tic
         for ($n = 1; $n < 100; $n++) {
             $candidate = $base . $n;
             $check = $pdo->prepare(
-                'SELECT COUNT(*) AS cnt FROM glpi_users WHERE email = ? OR name = ?'
+                'SELECT COUNT(*) AS cnt FROM glpi_users u
+                 LEFT JOIN glpi_useremails ue ON ue.users_id = u.id
+                 WHERE ue.email = ? OR u.name = ?'
             );
             $check->execute(["$candidate@$dominio", $candidate]);
             $row = $check->fetch();
@@ -288,6 +302,7 @@ function _auto_generate_institutional_email(PDO $pdo, string $glpiRoot, int $tic
     }
 
     $fullEmail = "$username@$dominio";
+    $log("Ticket #$ticketId — correo generado: $fullEmail");
 
     // ── 7. Generar contraseña temporal aleatoria ──────────────────────────────
     $chars    = 'abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#';
@@ -335,7 +350,14 @@ function _auto_generate_institutional_email(PDO $pdo, string $glpiRoot, int $tic
 
     // ── 11. Notificar al solicitante por email ─────────────────────────────────
     if ($toEmail !== '') {
-        _notify_requester_auto($glpiRoot, $ticketId, $toEmail, $fullEmail, $password, $now);
+        $log("Ticket #$ticketId — enviando email a $toEmail");
+        _notify_requester_auto($glpiRoot, $ticketId, $toEmail, $fullEmail, $password, $log);
+    } else {
+        $log("Ticket #$ticketId — sin email de solicitante, no se envió notificación.");
+    }
+
+    } catch (\Throwable $e) {
+        $log("Ticket #$ticketId ERROR inesperado: " . $e->getMessage() . ' en ' . $e->getFile() . ':' . $e->getLine());
     }
 }
 
@@ -343,18 +365,19 @@ function _auto_generate_institutional_email(PDO $pdo, string $glpiRoot, int $tic
  * Envía email al solicitante con los datos del correo institucional generado automáticamente.
  */
 function _notify_requester_auto(
-    string $glpiRoot,
-    int    $ticketId,
-    string $toEmail,
-    string $fullEmail,
-    string $password,
-    string $now
+    string   $glpiRoot,
+    int      $ticketId,
+    string   $toEmail,
+    string   $fullEmail,
+    string   $password,
+    callable $log
 ): void {
+    $now = date('Y-m-d H:i:s');
     try {
         require_once $glpiRoot . '/vendor/autoload.php';
         // Inbox del SOLICITANTE (Mailtrap sandbox independiente)
         $transport = new \Symfony\Component\Mailer\Transport\Smtp\EsmtpTransport(
-            'sandbox.smtp.mailtrap.io', 2525, false
+            'sandbox.smtp.mailtrap.io', 2525, null  // null = STARTTLS auto-negociado
         );
         $transport->setUsername('c728d26433c791');
         $transport->setPassword('807c73cb9509b2');
@@ -404,9 +427,10 @@ function _notify_requester_auto(
             ->text("Tu correo institucional: $fullEmail | Contraseña: $password");
 
         $mailer->send($emailMsg);
+        $log("Ticket #$ticketId — OK email enviado a $toEmail ($fullEmail)");
 
     } catch (\Throwable $e) {
-        error_log('[plugin_solicitud] Error notificando solicitante (auto): ' . $e->getMessage());
+        $log("Ticket #$ticketId ERROR (notify_requester) a $toEmail: " . $e->getMessage());
     }
 }
 
@@ -427,7 +451,7 @@ function _send_it_notification(PDO $pdo, string $glpiRoot, int $ticketId, string
 
         require_once $glpiRoot . '/vendor/autoload.php';
         $transport = new \Symfony\Component\Mailer\Transport\Smtp\EsmtpTransport(
-            'sandbox.smtp.mailtrap.io', 2525, false
+            'sandbox.smtp.mailtrap.io', 2525, null  // null = STARTTLS auto-negociado
         );
         $transport->setUsername('c728d26433c791');
         $transport->setPassword('807c73cb9509b2');
@@ -448,7 +472,13 @@ function _send_it_notification(PDO $pdo, string $glpiRoot, int $ticketId, string
         $mailer->send($email);
 
     } catch (\Throwable $e) {
-        error_log('[plugin_solicitud] Error enviando email IT: ' . $e->getMessage());
+        // Log en fichero dedicado
+        $logDir = defined('GLPI_LOG_DIR') ? GLPI_LOG_DIR : ($glpiRoot . '/files/_log');
+        file_put_contents(
+            $logDir . '/plugin_solicitud_mail.log',
+            date('[Y-m-d H:i:s]') . ' ERROR (notify_it) a ' . ($itEmail ?? '') . ': ' . $e->getMessage() . "\n",
+            FILE_APPEND
+        );
     }
 }
 
