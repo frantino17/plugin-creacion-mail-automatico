@@ -167,7 +167,7 @@ function plugin_solicitud_ticket_created(Ticket $ticket): void
 
     // ----- 2. Obtener la categoría del ticket --------------------------------
     $ticketCategory = '';
-    if (!empty($ticket->fields['itilcategories_id'])) {
+    if (!empty($ticket->fields[ 'itilcategories_id'])) {
         $catRow = $DB->request([
             'FROM'  => 'glpi_itilcategories',
             'WHERE' => ['id' => $ticket->fields['itilcategories_id']],
