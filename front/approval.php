@@ -91,7 +91,7 @@ $ticketId = (int) $row['tickets_id'];
 
 // ── 5. Validar expiración ─────────────────────────────────────────────────────
 if (!empty($row['expires_at']) && strtotime($row['expires_at']) < time()) {
-    _render_page('expired', 'Este enlace ha expirado. Contacte al área IT para generar uno nuevo.', $ticketId);
+    _render_page('expired', 'Este enlace ha expirado. Contacte a STID UTN FRC para generar uno nuevo.', $ticketId);
     exit;
 }
 
@@ -173,7 +173,7 @@ if ($action === 'reject') {
 
 // ── 11. Renderizar página de confirmación ─────────────────────────────────────
 $message  = ($action === 'approve')
-    ? 'La solicitud ha sido aprobada correctamente. El correo institucional será generado y enviado al solicitante una vez que el área IT cierre el ticket.'
+    ? 'La solicitud ha sido aprobada correctamente. El correo institucional será generado y enviado al solicitante una vez que STID UTN FRC cierre el pedido.'
     : 'La solicitud ha sido rechazada correctamente.';
 $decision = $newTokenStatus;
 
@@ -474,7 +474,7 @@ function _send_it_notification(PDO $pdo, string $glpiRoot, int $ticketId, string
         $mailer = new \Symfony\Component\Mailer\Mailer($transport);
 
         $html = "<p>El director ha <strong>$label</strong> la solicitud del "
-              . "<strong>Ticket #$ticketId</strong>.</p>"
+              . "<strong>N&uacute;mero de pedido: $ticketId</strong>.</p>"
               . "<p>Por favor, proceda según el resultado.</p>"
               . "<small>Generado automáticamente — $now</small>";
 
@@ -483,7 +483,7 @@ function _send_it_notification(PDO $pdo, string $glpiRoot, int $ticketId, string
             ->to($itEmail)
             ->subject("Solicitud Ticket #$ticketId: $label")
             ->html($html)
-            ->text("El director ha $label la solicitud del Ticket #$ticketId.");
+            ->text("El director ha $label la solicitud del pedido #$ticketId.");
 
         $mailer->send($email);
 
@@ -514,13 +514,13 @@ function _render_page(string $decision, string $message, int $ticketId): void
             $icon     = '&#10004;';
             $label    = 'Solicitud Aprobada';
             $accent   = '#28a745';
-            $subtitle = 'El ticket ha pasado a estado &ldquo;Solicitud aprobada por el director&rdquo;.';
+            $subtitle = 'El pedido ha pasado a estado &ldquo;Solicitud aprobada por el director&rdquo;.';
             break;
         case 'rejected':
             $icon     = '&#10008;';
             $label    = 'Solicitud Rechazada';
             $accent   = '#dc3545';
-            $subtitle = 'El ticket ha pasado a estado &ldquo;Cerrado&rdquo;.';
+            $subtitle = 'El pedido ha pasado a estado &ldquo;Cerrado&rdquo;.';
             break;
         case 'already_approved':
             $icon     = '&#10004;';
@@ -619,8 +619,8 @@ HTML;
         echo "    <p style=\"color:#666;font-style:italic\">$subtitle</p>\n";
     }
     if ($ticketId > 0) {
-        echo "    <div>Ticket de referencia:</div>\n";
-        echo "    <span class=\"ticket-ref\">#$ticketId</span>\n";
+        echo "    <div>N&uacute;mero de pedido:</div>\n";
+        echo "    <span class=\"ticket-ref\">$ticketId</span>\n";
     }
     if ($isSuccess) {
         echo "    <p>Las notificaciones correspondientes han sido enviadas autom&aacute;ticamente. "
@@ -630,7 +630,7 @@ HTML;
     echo <<<HTML
   </div>
   <div class="card-footer">
-    Este portal es gestionado por el sistema GLPI de su organización.<br>
+    Este sistema está gestionado por STID UTN FRC.<br>
     No responda a este mensaje.
   </div>
 </div>
