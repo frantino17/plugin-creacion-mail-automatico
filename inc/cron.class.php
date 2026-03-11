@@ -85,20 +85,33 @@ class PluginSolicitudCron extends CommonGLPI
             $remainingHours    = $remainingSec / 3600;
             $sinceReminderHrs  = $lastRemTs ? ($now - $lastRemTs) / 3600 : PHP_INT_MAX;
 
-            // ── CASO A: plazo de 48 h cumplido → reenviar email ───────────────
+            // ── CASO A: plazo de 48 h cumplido → reenviar o cerrar ───────────────
             if ($now >= $expiresAt) {
-                $processed += self::_resendEmail(
-                    $DB, $row, $ticketId, $tokenId,
-                    $configRow, $baseUrl, $sendCount, $nowStr
-                );
+                if ($sendCount >= 2) {
+                    // Ya se reenvió 2 veces sin respuesta → cerrar el ticket
+                    $processed += self::_closeTicketNoResponse(
+                        $DB, $ticketId, $tokenId, $nowStr
+                    );
+                } else {
+                    // Aún quedan reenvíos disponibles
+                    $processed += self::_resendEmail(
+                        $DB, $row, $ticketId, $tokenId,
+                        $configRow, $baseUrl, $sendCount, $nowStr
+                    );
+                }
                 $task->addVolume(1);
                 continue;
             }
 
             // ── CASO B: recordatorio cada 12 h (solo si aún quedan > 1 h) ────
             if ($sinceReminderHrs >= 12 && $elapsedHours >= 12 && $remainingHours > 1) {
-                $elapsed = (int) round($elapsedHours);
-                $rem     = (int) round($remainingHours);
+                $elapsed      = (int) round($elapsedHours);
+                $rem          = (int) round($remainingHours);
+                $reenviosLeft = 2 - $sendCount;  // cuántos reenvíos quedan
+                $closureNote  = $reenviosLeft > 0
+                    ? "Si el director no responde antes del plazo, el sistema reenviará el correo (reenvío {$sendCount} de 2). "
+                      . "Tras 2 reenvíos sin respuesta, el ticket será cerrado automáticamente."
+                    : "⚠️ Último aviso: este es el último plazo antes de cerrar el ticket automáticamente por falta de respuesta.";
 
                 $DB->insert('glpi_itilfollowups', [
                     'itemtype'        => 'Ticket',
@@ -108,8 +121,7 @@ class PluginSolicitudCron extends CommonGLPI
                         "⏱ Recordatorio automático (solicitud pendiente de aprobación):\n\n"
                         . "  • Tiempo transcurrido  : {$elapsed} horas\n"
                         . "  • Tiempo restante      : {$rem} horas\n\n"
-                        . "Si el director no responde antes del plazo, el sistema reenviará "
-                        . "el correo automáticamente.",
+                        . $closureNote,
                     'is_private'      => 1,
                     'requesttypes_id' => 0,
                     'date'            => $nowStr,
@@ -205,6 +217,56 @@ class PluginSolicitudCron extends CommonGLPI
                 . "  • Nuevo plazo límite : $newDeadline\n\n"
                 . "El enlace anterior quedó desactivado. Se generó un nuevo enlace de aprobación.",
             'is_private'      => 1,
+            'requesttypes_id' => 0,
+            'date'            => $nowStr,
+            'date_creation'   => $nowStr,
+            'date_mod'        => $nowStr,
+        ]);
+
+        return 1;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Helper privado: cerrar ticket por falta de respuesta del director
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Se ejecuta cuando send_count >= 2 y el plazo volvió a expirar.
+     * Marca el token como 'no_response', cierra el ticket (status=6) y
+     * agrega un followup explicativo.
+     */
+    private static function _closeTicketNoResponse(
+        \DBmysql $DB,
+        int      $ticketId,
+        int      $tokenId,
+        string   $nowStr
+    ): int {
+        // 1. Invalidar token
+        $DB->update(
+            'glpi_plugin_solicitud_tokens',
+            ['status' => 'no_response', 'date_action' => $nowStr],
+            ['id'     => $tokenId]
+        );
+
+        // 2. Cerrar el ticket (status 6 = Cerrado)
+        $DB->update(
+            'glpi_tickets',
+            ['status' => 6, 'date_mod' => $nowStr, 'closedate' => $nowStr],
+            ['id'     => $ticketId]
+        );
+
+        // 3. Followup informativo
+        $DB->insert('glpi_itilfollowups', [
+            'itemtype'        => 'Ticket',
+            'items_id'        => $ticketId,
+            'users_id'        => 0,
+            'content'         =>
+                "🔒 Ticket cerrado automáticamente por falta de respuesta del director.\n\n"
+                . "  • Se envió el correo de aprobación en 3 oportunidades (1 original + 2 reenvíos).\n"
+                . "  • El director no respondió en ninguno de los plazos.\n\n"
+                . "El ticket pasa a estado Cerrado. Si desea retomar la solicitud, "
+                . "deberá abrirse un nuevo ticket.",
+            'is_private'      => 0,   // visible para todos
             'requesttypes_id' => 0,
             'date'            => $nowStr,
             'date_creation'   => $nowStr,
