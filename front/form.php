@@ -238,9 +238,10 @@ header('Content-Type: text/html; charset=UTF-8');
 <div class="card">
 
 <?php if ($success): ?>
-  <div class="card-header success-header">
+  <div class="card-header success-header" style="text-align:center">
+    <?= $logoHtmlF ?>
     <div class="success-icon">&#10004;</div>
-    <h1 style="text-align:center">Formulario enviado</h1>
+    <h1>Formulario enviado</h1>
   </div>
   <div class="card-body success-msg">
     <p>Los datos del correo institucional han sido registrados correctamente en el ticket.</p>
@@ -252,9 +253,10 @@ header('Content-Type: text/html; charset=UTF-8');
   </div>
 
 <?php else: ?>
-  <div class="card-header">
+  <div class="card-header" style="text-align:center">
+    <?= $logoHtmlF ?>
     <h1>Alta de Correo Institucional</h1>
-    <p>Ticket #<?= $ticketId ?> — <?= htmlspecialchars($ticketTitle, ENT_QUOTES) ?></p>
+    <p>N&uacute;mero de pedido: <?= $ticketId ?> &mdash; <?= htmlspecialchars($ticketTitle, ENT_QUOTES) ?></p>
   </div>
   <div class="card-body">
 

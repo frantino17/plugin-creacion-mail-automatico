@@ -399,7 +399,11 @@ function _notify_requester_auto(
         $transport->setPassword('4c62cffbeeff3f');
         $mailer = new \Symfony\Component\Mailer\Mailer($transport);
 
-        $safeEmail = htmlspecialchars($fullEmail, ENT_QUOTES);
+        $safeEmail  = htmlspecialchars($fullEmail, ENT_QUOTES);
+        $_imgPath3  = __DIR__ . '/../img/utn_logo.png';
+        $logoHtml3  = file_exists($_imgPath3)
+            ? '<img src=\'data:image/png;base64,' . base64_encode(file_get_contents($_imgPath3)) . '\' alt=\'UTN\' style=\'height:50px;display:block;margin:0 auto 10px;filter:brightness(0) invert(1);\'>'
+            : '';
 
         $html = "
 <!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'>
@@ -418,7 +422,7 @@ function _notify_requester_auto(
        border-radius:0 0 8px 8px;font-size:12px;color:#888}
 </style></head><body>
 <div class='w'>
-  <div class='hdr'><h1>&#9993; Tu correo institucional fue creado</h1></div>
+  <div class='hdr' style='text-align:center'>{$logoHtml3}<h1 style='margin-top:8px'>&#9993; Tu correo institucional fue creado</h1></div>
   <div class='bdy'>
     <p>Tu solicitud del <strong>Ticket #{$ticketId}</strong> ha sido aprobada y procesada.<br>
        A continuaci&oacute;n encontrar&aacute;s los datos de acceso a tu nuevo correo institucional:</p>
@@ -473,10 +477,27 @@ function _send_it_notification(PDO $pdo, string $glpiRoot, int $ticketId, string
         $transport->setPassword('4c62cffbeeff3f');
         $mailer = new \Symfony\Component\Mailer\Mailer($transport);
 
-        $html = "<p>El director ha <strong>$label</strong> la solicitud del "
-              . "<strong>N&uacute;mero de pedido: $ticketId</strong>.</p>"
-              . "<p>Por favor, proceda según el resultado.</p>"
-              . "<small>Generado automáticamente — $now</small>";
+        $_imgPath4 = __DIR__ . '/../img/utn_logo.png';
+        $logoHtml4 = file_exists($_imgPath4)
+            ? '<img src="data:image/png;base64,' . base64_encode(file_get_contents($_imgPath4)) . '" alt="UTN" style="height:50px;display:block;margin:0 auto 10px;filter:brightness(0) invert(1);">'
+            : '';
+        $accentIt  = ($action === 'approve') ? '#28a745' : '#dc3545';
+        $html = "<!DOCTYPE html><html lang='es'><head><meta charset='UTF-8'><style>"
+              . "body{font-family:Arial,sans-serif;background:#f0f2f5;padding:30px;margin:0}"
+              . ".w{max-width:600px;margin:auto}"
+              . ".hdr{background:{$accentIt};color:#fff;padding:22px 28px;border-radius:8px 8px 0 0;text-align:center}"
+              . ".hdr h1{font-size:19px;margin:8px 0 0}"
+              . ".bdy{background:#fff;padding:28px;border:1px solid #dde3ec;border-top:none;color:#444;line-height:1.6}"
+              . ".ftr{background:#f7f9ff;padding:14px 28px;border:1px solid #dde3ec;border-top:none;border-radius:0 0 8px 8px;font-size:12px;color:#888;text-align:center}"
+              . "</style></head><body><div class='w'>"
+              . "<div class='hdr'>{$logoHtml4}<h1>Solicitud {$label}</h1></div>"
+              . "<div class='bdy'>"
+              . "<p>El director ha <strong>{$label}</strong> la solicitud del "
+              . "<strong>N&uacute;mero de pedido: {$ticketId}</strong>.</p>"
+              . "<p>Por favor, proceda seg&uacute;n el resultado.</p>"
+              . "<small>Generado autom&aacute;ticamente &mdash; {$now}</small>"
+              . "</div><div class='ftr'>Este sistema est&aacute; gestionado por STID UTN FRC</div>"
+              . "</div></body></html>";
 
         $email = (new \Symfony\Component\Mime\Email())
             ->from('noreply@glpi.local')
@@ -550,6 +571,10 @@ function _render_page(string $decision, string $message, int $ticketId): void
 
     $safeMessage = htmlspecialchars($message, ENT_QUOTES, 'UTF-8');
     $isSuccess   = in_array($decision, ['approved', 'rejected', 'already_approved', 'already_rejected'], true);
+    $_imgPath5   = __DIR__ . '/../img/utn_logo.png';
+    $logoHtml5   = file_exists($_imgPath5)
+        ? '<img src="data:image/png;base64,' . base64_encode(file_get_contents($_imgPath5)) . '" alt="UTN" style="height:45px;display:block;margin:0 auto 8px;filter:brightness(0) invert(1);">'
+        : '';
 
     echo <<<HTML
 <!DOCTYPE html>
@@ -608,6 +633,7 @@ function _render_page(string $decision, string $message, int $ticketId): void
 <body>
 <div class="card">
   <div class="card-header">
+    {$logoHtml5}
     <div class="icon">{$icon}</div>
     <h1>{$label}</h1>
   </div>

@@ -150,6 +150,11 @@ function plugin_solicitud_approval_email_html(
     $approveUrl  = htmlspecialchars($approveUrl,  ENT_QUOTES);
     $rejectUrl   = htmlspecialchars($rejectUrl,   ENT_QUOTES);
 
+    $_imgPath = __DIR__ . '/../img/utn_logo.png';
+    $logoHtml = file_exists($_imgPath)
+        ? '<img src="data:image/png;base64,' . base64_encode(file_get_contents($_imgPath)) . '" alt="UTN" style="height:50px;display:block;margin:0 auto 10px;filter:brightness(0) invert(1);">'
+        : '';
+
     return <<<HTML
 <!DOCTYPE html>
 <html lang="es">
@@ -181,7 +186,8 @@ function plugin_solicitud_approval_email_html(
 </head>
 <body>
 <div class="wrapper">
-  <div class="header">
+  <div class="header" style="text-align:center">
+    $logoHtml
     <h1>Solicitud de Aprobación</h1>
   </div>
   <div class="body">
@@ -227,6 +233,11 @@ function plugin_solicitud_send_computos_email(
 ): void {
     $safeUrl = htmlspecialchars($formUrl, ENT_QUOTES);
 
+    $_imgPath2 = __DIR__ . '/../img/utn_logo.png';
+    $logoHtml2 = file_exists($_imgPath2)
+        ? '<img src="data:image/png;base64,' . base64_encode(file_get_contents($_imgPath2)) . '" alt="UTN" style="height:50px;display:block;margin:0 auto 10px;filter:brightness(0) invert(1);">'
+        : '';
+
     $html = <<<HTML
 <!DOCTYPE html>
 <html lang="es">
@@ -244,7 +255,7 @@ function plugin_solicitud_send_computos_email(
        border-radius:0 0 8px 8px;font-size:12px;color:#888}
 </style></head><body>
 <div class="w">
-  <div class="hdr"><h1>&#9989; Solicitud Aprobada &mdash; Alta de Correo</h1></div>
+  <div class="hdr" style="text-align:center">$logoHtml2<h1 style="margin-top:8px">&#9989; Solicitud Aprobada &mdash; Alta de Correo</h1></div>
   <div class="bdy">
     <p>El director ha <strong>aprobado</strong> la solicitud del <strong>Ticket #$ticketId</strong>.</p>
     <div class="box">Complete el formulario para registrar el correo institucional creado.</div>
