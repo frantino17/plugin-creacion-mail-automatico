@@ -188,12 +188,12 @@ function plugin_solicitud_approval_email_html(
     <p>Se ha creado un nuevo ticket que requiere su aprobación:</p>
 
     <div class="ticket-box">
-      <strong>Ticket #$ticketId</strong><br>
+      <strong>N&uacute;mero de pedido: $ticketId</strong><br>
       $ticketTitle
     </div>
 
-    <p>Por favor, haga clic en uno de los botones a continuación para tomar
-       su decisión. <strong>No es necesario iniciar sesión en GLPI.</strong></p>
+    <p>Por favor, haga clic en uno de los botones a continuaci&oacute;n para tomar
+       su decisi&oacute;n.</p>
 
     <div class="buttons">
       <a href="$approveUrl" class="btn btn-approve">✔ Aprobar</a>
@@ -202,7 +202,7 @@ function plugin_solicitud_approval_email_html(
   </div>
   <div class="footer">
     Este mensaje fue generado automáticamente. No responda a este correo.<br>
-    GLPI — Sistema de Gestión de Tickets
+    Este sistema esta gestionado por STID UTN FRC
   </div>
 </div>
 </body>
