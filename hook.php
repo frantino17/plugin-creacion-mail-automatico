@@ -10,6 +10,7 @@ require_once __DIR__ . '/inc/approvaltoken.class.php';
 require_once __DIR__ . '/inc/config.class.php';
 require_once __DIR__ . '/inc/mail.php';
 require_once __DIR__ . '/inc/solicitud.class.php';
+require_once __DIR__ . '/inc/cron.class.php';
 
 // ─── Instalación ──────────────────────────────────────────────────────────────
 
@@ -54,6 +55,20 @@ function plugin_solicitud_install(): bool
                 ALTER TABLE `glpi_plugin_solicitud_tokens`
                     ADD COLUMN `form_token` VARCHAR(128) DEFAULT NULL
                         AFTER `expires_at`
+            ");
+        }
+        if (!$DB->fieldExists('glpi_plugin_solicitud_tokens', 'send_count')) {
+            $DB->doQuery("
+                ALTER TABLE `glpi_plugin_solicitud_tokens`
+                    ADD COLUMN `send_count` TINYINT UNSIGNED NOT NULL DEFAULT 0
+                        AFTER `form_token`
+            ");
+        }
+        if (!$DB->fieldExists('glpi_plugin_solicitud_tokens', 'last_reminder_sent')) {
+            $DB->doQuery("
+                ALTER TABLE `glpi_plugin_solicitud_tokens`
+                    ADD COLUMN `last_reminder_sent` DATETIME DEFAULT NULL
+                        AFTER `send_count`
             ");
         }
     }
@@ -191,10 +206,14 @@ function plugin_solicitud_ticket_created(Ticket $ticket): void
     );
 
     // ----- 7. Agregar seguimiento al ticket indicando que se envió el mail --
+    $sentAt   = date('d/m/Y \a\s H:i');
+    $deadline = date('d/m/Y \a\s H:i', strtotime('+' . PluginSolicitudApprovalToken::TOKEN_TTL_HOURS . ' hours'));
     plugin_solicitud_add_followup(
         $ticketId,
-        'Se ha enviado solicitud de aprobación al director vía email. '
-        . 'Esperando respuesta.'
+        "📧 Solicitud de aprobación enviada al director.\n\n"
+        . "  • Enviado el   : $sentAt\n"
+        . "  • Plazo límite : $deadline (" . PluginSolicitudApprovalToken::TOKEN_TTL_HOURS . " horas)\n\n"
+        . 'Si el director no responde antes del plazo, el sistema reenviará el correo automáticamente.'
     );
 }
 

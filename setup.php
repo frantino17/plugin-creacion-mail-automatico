@@ -85,6 +85,20 @@ function plugin_init_solicitud(): void
         ];
         // ── Registro de clases del plugin ─────────────────────────────────────
         Plugin::registerClass('PluginSolicitudApprovalToken');
-        Plugin::registerClass('PluginSolicitudConfig');
-    }
+        Plugin::registerClass('PluginSolicitudConfig');        Plugin::registerClass('PluginSolicitudCron');
+
+        // ── Tarea programada: verificar solicitudes pendientes cada hora ──────
+        if (class_exists('CronTask')) {
+            CronTask::register(
+                'PluginSolicitudCron',       // clase
+                'CheckPendingApprovals',     // nombre (método: cronCheckPendingApprovals)
+                3600,                        // frecuencia: 1 hora en segundos
+                [
+                    'comment' => 'Verifica aprobaciones pendientes, agrega recordatorios '
+                               . 'y reenvía el email al director al cumplirse 48 h.',
+                    'mode'    => CronTask::MODE_INTERNAL,
+                    'state'   => CronTask::STATE_WAITING,
+                ]
+            );
+        }    }
 }
