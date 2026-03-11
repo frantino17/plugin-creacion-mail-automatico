@@ -74,7 +74,7 @@ if ($token === '' || $action === '') {
 
 // ── 4. Buscar token en BD ─────────────────────────────────────────────────────
 $stmt = $pdo->prepare(
-    'SELECT id, tickets_id, status, expires_at
+    'SELECT id, tickets_id, status, expires_at, date_action
      FROM glpi_plugin_solicitud_tokens
      WHERE token = ?
      LIMIT 1'
@@ -97,8 +97,22 @@ if (!empty($row['expires_at']) && strtotime($row['expires_at']) < time()) {
 
 // ── 6. Verificar que no haya sido procesado ya ────────────────────────────────
 if ($row['status'] !== 'pending') {
-    $ya = ($row['status'] === 'approved') ? 'aprobada' : 'rechazada';
-    _render_page($row['status'], "Esta solicitud ya fue $ya con anterioridad.", $ticketId);
+    // email_sent / form_sent son variantes de aprobado
+    $alreadyDecision = in_array($row['status'], ['approved', 'email_sent', 'form_sent'], true)
+        ? 'already_approved'
+        : 'already_rejected';
+
+    $dateStr = '';
+    if (!empty($row['date_action'])) {
+        $ts      = strtotime($row['date_action']);
+        $dateStr = date('d/m/Y \a\s H:i', $ts) . ' hs';
+    }
+
+    $msg = $dateStr !== ''
+        ? "Esta solicitud fue procesada el $dateStr. La decisión no puede modificarse."
+        : 'Esta solicitud ya fue procesada con anterioridad. La decisión no puede modificarse.';
+
+    _render_page($alreadyDecision, $msg, $ticketId);
     exit;
 }
 
@@ -508,6 +522,18 @@ function _render_page(string $decision, string $message, int $ticketId): void
             $accent   = '#dc3545';
             $subtitle = 'El ticket ha pasado a estado &ldquo;Cerrado&rdquo;.';
             break;
+        case 'already_approved':
+            $icon     = '&#10004;';
+            $label    = 'Esta solicitud ya fue aprobada';
+            $accent   = '#28a745';
+            $subtitle = 'Esta solicitud ya hab&iacute;a sido <strong>aprobada</strong> anteriormente.<br>El enlace ha sido desactivado y no puede utilizarse nuevamente.';
+            break;
+        case 'already_rejected':
+            $icon     = '&#10008;';
+            $label    = 'Esta solicitud ya fue rechazada';
+            $accent   = '#dc3545';
+            $subtitle = 'Esta solicitud ya hab&iacute;a sido <strong>rechazada</strong> anteriormente.<br>El enlace ha sido desactivado y no puede utilizarse nuevamente.';
+            break;
         case 'expired':
             $icon     = '&#9200;';
             $label    = 'Enlace expirado';
@@ -523,7 +549,7 @@ function _render_page(string $decision, string $message, int $ticketId): void
     }
 
     $safeMessage = htmlspecialchars($message, ENT_QUOTES, 'UTF-8');
-    $isSuccess   = in_array($decision, ['approved', 'rejected'], true);
+    $isSuccess   = in_array($decision, ['approved', 'rejected', 'already_approved', 'already_rejected'], true);
 
     echo <<<HTML
 <!DOCTYPE html>
